@@ -144,11 +144,22 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   gap:11px;align-items:center;transition:border-color .15s,background .15s;
 }
 .item:hover:not(:disabled){border-color:var(--accent-dark);background:var(--panel2)}
-.item:disabled{opacity:.42;cursor:not-allowed}
-/* Locked tiers read as "not yet" rather than "broken": dimmer still,
-   dashed edge, and no hover affordance. */
-.item.locked{opacity:.3;border-style:dashed}
+/* Only .72: at .42 an unaffordable row read as an empty panel, and a new
+   player with $0 thought the Staff tab had nothing in it. */
+.item:disabled{opacity:.72;cursor:not-allowed}
+/* Locked tiers read as "not yet" rather than "broken". */
+.item.locked{opacity:.45;border-style:dashed}
 .item.locked .item-ic{background:transparent;font-size:15px}
+
+/* Owned count, drawn as pips -- one per hire, so a glance tells you the
+   shape of your team without reading digits. */
+.pips{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;align-items:center}
+.pip{width:6px;height:9px;border-radius:1.5px;background:var(--accent);opacity:.85}
+.pip.mgr{background:var(--warn)}
+.pips .more{
+  font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-left:3px;
+  font-variant-numeric:tabular-nums;
+}
 .item-ic{
   width:38px;height:38px;border-radius:9px;background:var(--panel2);
   display:grid;place-items:center;font-size:19px;
@@ -393,6 +404,18 @@ function renderHead(){
   badge.textContent = avail;
 }
 
+/* One pip per hire, capped so a hundred staff cannot blow out the row --
+   past the cap the remainder is shown as a count instead. */
+const PIP_CAP = 20;
+function pipsFor(n){
+  if(!n) return "";
+  const shown = Math.min(n, PIP_CAP);
+  let html = "";
+  for(let i = 0; i < shown; i++) html += '<span class="pip"></span>';
+  if(n > PIP_CAP) html += '<span class="more">+' + fmt(n - PIP_CAP) + '</span>';
+  return html;
+}
+
 /* The store is rebuilt only when the *set* of visible rows changes.
    Affordability changes every tick, so that is applied separately by
    refreshAffordability() -- rebuilding this DOM ten times a second would
@@ -426,6 +449,13 @@ function refreshAffordability(){
       if(rateEl) rateEl.textContent = c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "";
       const ownEl = el.querySelector(".item-o");
       if(ownEl) ownEl.textContent = c(d.id);
+      // Pips are cheap to diff by count, and rebuilding the row on every
+      // hire would fight the signature cache.
+      const pipEl = el.querySelector(".js-pips");
+      if(pipEl && +pipEl.dataset.n !== c(d.id)){
+        pipEl.dataset.n = c(d.id);
+        pipEl.innerHTML = pipsFor(c(d.id));
+      }
     } else {
       const u = UPGRADES.find(x=>x.id===id); if(!u) return;
       cost = u.cost;
@@ -469,7 +499,8 @@ function renderList(force){
         b.innerHTML =
           '<div class="item-ic">' + d.icon + '</div>' +
           '<div><div class="item-n">' + d.name + '</div>' +
-          '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
+          '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div>' +
+          '<div class="pips js-pips">' + pipsFor(c(d.id)) + '</div></div>' +
           '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
           '<div class="item-o">' + c(d.id) + '</div></div>';
         b.onclick = () => buyStaff(d);
