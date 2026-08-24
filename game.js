@@ -102,6 +102,55 @@ class Game {
         this.autoSaveInterval = null;
         this.lastSaveTime = Date.now();
 
+        // Initialize prestige system
+        this.prestige = {
+            points: 0,
+            available: 0,
+            threshold: 100000,
+            multiplier: 0.05 // Each point = +5% data gain
+        };
+
+        // Initialize hiring options
+        this.hiringOptions = [
+            {
+                id: 'Tech',
+                cost: 100,
+                baseProd: 1,
+                btn: 'hireTechBtn',
+                card: 'hireTechCard',
+                count: 0,
+                costScale: 1.15
+            },
+            {
+                id: 'Supervisor',
+                cost: 1000,
+                baseProd: 10,
+                btn: 'hireSupervisorBtn',
+                card: 'hireSupervisorCard',
+                count: 0,
+                costScale: 1.18
+            },
+            {
+                id: 'Director',
+                cost: 5000,
+                baseProd: 50,
+                btn: 'hireDirectorBtn',
+                card: 'hireDirectorCard',
+                count: 0,
+                costScale: 1.22
+            },
+            {
+                id: 'RegionalManager',
+                cost: 50000,
+                baseProd: 500,
+                btn: 'hireRegionalManagerBtn',
+                card: 'hireRegionalManagerCard',
+                count: 0,
+                costScale: 1.25
+            }
+        ];
+        this.totalPassiveProd = 0;
+
         // Initialize the game
         this.initialize();
 
@@ -140,48 +189,13 @@ class Game {
 
     setupClickHandlers() {
         const fixButton = document.getElementById('fixComputer');
-        if (!fixButton) {
-            console.error('Fix button not found');
-            return;
+        if (fixButton) {
+            fixButton.addEventListener('click', () => {
+                this.data += this.clickValue;
+                this.updateDisplay();
+                this.saveGame();
+            });
         }
-
-        const startAutoClick = () => {
-            // Clear any existing interval
-            this.stopAutoClick();
-            
-            // Do initial click
-            this.handleClick();
-            
-            // Start auto-clicking
-            this.holdIntervalId = setInterval(() => {
-                this.handleClick();
-            }, 750);
-        };
-
-        const stopAutoClick = () => {
-            if (this.holdIntervalId) {
-                clearInterval(this.holdIntervalId);
-                this.holdIntervalId = null;
-            }
-        };
-
-        // Mouse events
-        fixButton.onmousedown = () => startAutoClick();
-        document.onmouseup = () => stopAutoClick();
-
-        // Touch events
-        fixButton.ontouchstart = (e) => {
-            e.preventDefault();
-            startAutoClick();
-        };
-        document.ontouchend = () => stopAutoClick();
-
-        // Clean up on page visibility change
-        document.onvisibilitychange = () => {
-            if (document.hidden) {
-                stopAutoClick();
-            }
-        };
     }
 
     handleClick() {
@@ -204,63 +218,56 @@ class Game {
     }
 
     updateDisplay() {
-        // Update data display
-        const dataDisplay = document.getElementById('dataDisplay');
-        if (dataDisplay) {
-            dataDisplay.textContent = Math.floor(this.data);
-        }
-
-        // Update DPS display
-        const dpsDisplay = document.getElementById('dpsDisplay');
-        if (dpsDisplay) {
-            const dps = this.calculateDPS();
-            dpsDisplay.textContent = Math.round(dps);
-            
-            // Update peak DPS if current DPS is higher
-            if (dps > this.statistics.peakDPS) {
-                this.statistics.peakDPS = dps;
+        // Update main stats
+        const dataDisplay = document.getElementById('data');
+        if (dataDisplay) dataDisplay.textContent = Math.floor(this.data);
+        
+        // Calculate total passive production
+        this.totalPassiveProd = this.hiringOptions.reduce((sum, opt) => sum + opt.baseProd * opt.count, 0);
+        const dpsDisplay = document.getElementById('dataPerSecond');
+        if (dpsDisplay) dpsDisplay.textContent = this.totalPassiveProd;
+        
+        const clickValueDisplay = document.getElementById('clickValue');
+        if (clickValueDisplay) clickValueDisplay.textContent = this.clickValue;
+        
+        // Update hiring bar UI
+        this.hiringOptions.forEach(opt => {
+            const card = document.getElementById(opt.card);
+            const btn = document.getElementById(opt.btn);
+            const cost = Math.floor(opt.cost * Math.pow(opt.costScale, opt.count));
+            const prod = opt.baseProd * (opt.count + 1);
+            if (card) {
+                card.querySelector('.hire-cost').textContent = `${cost.toLocaleString()} Data Points`;
+                card.querySelector('.hire-prod').textContent = `Generates ${opt.baseProd.toLocaleString()} Data/s`;
+                let owned = card.querySelector('.hire-owned');
+                if (!owned) {
+                    owned = document.createElement('div');
+                    owned.className = 'hire-owned';
+                    owned.style = 'color:#7a8ca3;font-size:0.9rem;margin-top:0.2rem;';
+                    card.appendChild(owned);
+                }
+                owned.textContent = `Owned: ${opt.count}`;
             }
-        }
-
-        // Update click value display
-        const clickValueDisplay = document.getElementById('clickValueDisplay');
-        if (clickValueDisplay) {
-            const totalClickValue = Math.round(this.clickValue * (1 + this.achievementBonuses.clickValue));
-            clickValueDisplay.textContent = totalClickValue;
-        }
-
-        // Update technician buttons
-        this.updateTechnicianButtons();
-
-        // Check for unlocks
-        this.checkUnlocks();
+            if (btn) {
+                if (this.data >= cost) {
+                    btn.classList.add('can-afford');
+                    btn.disabled = false;
+                } else {
+                    btn.classList.remove('can-afford');
+                    btn.disabled = true;
+                }
+            }
+        });
+        
+        // Render IT Team panel
+        this.renderITTeam();
     }
 
     startGameLoop() {
         setInterval(() => {
-            const now = performance.now();
-            const deltaTime = now - this.lastUpdate;
-            this.lastUpdate = now;
-            
-            // Update game state
-            this.update(deltaTime);
-        }, 100);
-    }
-
-    update(deltaTime) {
-        if (!this.tutorialState.completed) {
-            const currentStep = this.tutorialState.steps[this.tutorialState.currentStep];
-            if (currentStep?.requirement) {
-                if (currentStep.trigger === 'canHireTech' && this.data >= currentStep.requirement) {
-                    this.showNextTutorialStep('canHireTech', this.data);
-                }
-                else if (currentStep.trigger === 'canHireManager' && this.data >= currentStep.requirement) {
-                    this.showNextTutorialStep('canHireManager', this.data);
-                }
-            }
-        }
-        
-        this.updateDisplay();
+            this.data += this.totalPassiveProd / 5; // 5 times per second
+            this.updateDisplay();
+        }, 200);
     }
 
     setupPanelHandlers() {
@@ -456,6 +463,9 @@ class Game {
             }
         });
         
+        // Apply prestige multiplier
+        dps *= (1 + this.prestige.points * this.prestige.multiplier);
+        
         // Apply income bonus if any
         if (this.achievementBonuses.income) {
             dps *= (1 + this.achievementBonuses.income);
@@ -486,7 +496,7 @@ class Game {
                         e.preventDefault();
                         e.stopPropagation();
                         if (employee.owned) {
-                            this.startTask(roleName, empId);
+                            this.startTask('technician', empId);
                         }
                     };
                 }
@@ -555,23 +565,19 @@ class Game {
     }
 
     setupHireHandlers() {
-        // Handle technician hiring
-        Object.entries(this.roles.technician.employees).forEach(([techId, tech]) => {
-            const button = document.getElementById(`hire${techId.charAt(0).toUpperCase() + techId.slice(1)}`);
-            if (!button) {
-                console.error(`Hire button not found for ${techId}`);
-                return;
+        this.hiringOptions.forEach(opt => {
+            const btn = document.getElementById(opt.btn);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const cost = Math.floor(opt.cost * Math.pow(opt.costScale, opt.count));
+                    if (this.data >= cost) {
+                        this.data -= cost;
+                        opt.count++;
+                        this.updateDisplay();
+                        this.saveGame();
+                    }
+                });
             }
-
-            // Remove any existing listeners
-            const newButton = button.cloneNode(true);
-            button.parentNode.replaceChild(newButton, button);
-
-            newButton.addEventListener('click', () => {
-                if (this.data >= tech.cost && !tech.owned) {
-                    this.handleEmployeeHire('technician', techId);
-                }
-            });
         });
     }
 
@@ -609,66 +615,30 @@ class Game {
     }
 
     setupSettingsHandlers() {
-        const resetButton = document.getElementById('resetGame');
-        if (resetButton) {
-            resetButton.addEventListener('click', () => {
-                if (confirm('Are you sure you want to reset the game? This will delete all progress and cannot be undone.')) {
-                    this.resetGame();
-                }
+        // Dark mode toggle
+        const themeBtn = document.getElementById('themeToggle');
+        if (themeBtn) {
+            themeBtn.addEventListener('click', () => {
+                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+                this.saveGame();
             });
         }
-
-        // Export save
-        document.getElementById('exportSave')?.addEventListener('click', () => {
-            const saveData = this.getSaveData();
-            const blob = new Blob([JSON.stringify(saveData)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'it-empire-save.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        });
-
-        // Import save
-        document.getElementById('importSave')?.addEventListener('click', () => {
-            document.getElementById('saveFileInput').click();
-        });
-
-        document.getElementById('saveFileInput')?.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const saveData = JSON.parse(e.target.result);
-                        this.loadSaveData(saveData);
-                        this.showNotification('Game data imported successfully!');
-                    } catch (error) {
-                        this.showNotification('Error importing save file!');
-                    }
-                };
-                reader.readAsText(file);
+        // Clear Save button
+        let clearBtn = document.getElementById('clearSave');
+        if (!clearBtn) {
+            clearBtn = document.createElement('button');
+            clearBtn.id = 'clearSave';
+            clearBtn.className = 'button';
+            clearBtn.innerHTML = '<i class="fas fa-trash"></i> Clear Save';
+            const settingsGrid = document.querySelector('.settings-grid .setting-buttons');
+            if (settingsGrid) settingsGrid.appendChild(clearBtn);
+        }
+        clearBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear your save? This cannot be undone.')) {
+                localStorage.removeItem('itEmpireSave');
+                location.reload();
             }
-        });
-
-        // Manual save button
-        document.getElementById('manualSave')?.addEventListener('click', () => {
-            this.saveGame();
-            this.showNotification('Game saved successfully!');
-        });
-
-        // Settings changes
-        document.getElementById('notificationDuration')?.addEventListener('change', (e) => {
-            this.settings.notificationDuration = parseInt(e.target.value);
-            this.saveGame(); // Save when settings change
-        });
-
-        document.getElementById('progressAnimation')?.addEventListener('change', (e) => {
-            this.settings.progressAnimation = e.target.value;
-            this.saveGame(); // Save when settings change
         });
     }
 
@@ -731,155 +701,35 @@ class Game {
     }
 
     saveGame() {
-        const saveData = this.getSaveData();
-        try {
-            localStorage.setItem('itEmpireSave', JSON.stringify(saveData));
-            const saveIndicator = document.getElementById('saveIndicator');
-            if (saveIndicator) {
-                saveIndicator.classList.add('show');
-                setTimeout(() => {
-                    saveIndicator.classList.remove('show');
-                }, 2000);
-            }
-        } catch (error) {
-            console.error('Save error:', error);
-            this.showNotification('Failed to save game!');
-        }
+        const saveData = {
+            data: this.data,
+            clickValue: this.clickValue,
+            hiringOptions: this.hiringOptions.map(opt => ({ id: opt.id, count: opt.count })),
+            theme: document.body.getAttribute('data-theme') || 'light'
+        };
+        localStorage.setItem('itEmpireSave', JSON.stringify(saveData));
     }
 
     loadGame() {
-        const savedData = localStorage.getItem('itEmpireSave');
-        if (savedData) {
+        const saved = localStorage.getItem('itEmpireSave');
+        if (saved) {
             try {
-                const loadedState = JSON.parse(savedData);
-                
-                // Restore game state
-                this.data = loadedState.data || 0;
-                this.clickValue = loadedState.clickValue || 1;
-                this.statistics = loadedState.statistics || this.statistics;
-                this.achievementBonuses = loadedState.achievementBonuses || this.achievementBonuses;
-                
-                // Restore employee states
-                if (loadedState.roles) {
-                    Object.entries(loadedState.roles).forEach(([roleName, role]) => {
-                        Object.entries(role.employees).forEach(([empId, employee]) => {
-                            if (employee.owned) {
-                                this.roles[roleName].employees[empId].owned = true;
-                                this.roles[roleName].employees[empId].automated = employee.automated || false;
-                                
-                                // Update the UI for owned employees
-                                this.updateEmployeeDisplay(roleName, empId);
-                            }
-                        });
+                const saveData = JSON.parse(saved);
+                this.data = saveData.data || 0;
+                this.clickValue = saveData.clickValue || 1;
+                if (saveData.hiringOptions) {
+                    saveData.hiringOptions.forEach(savedOpt => {
+                        const opt = this.hiringOptions.find(o => o.id === savedOpt.id);
+                        if (opt) opt.count = savedOpt.count;
                     });
                 }
-
-                // Restore manager states and automation
-                if (loadedState.roles?.manager?.employees) {
-                    Object.entries(loadedState.roles.manager.employees).forEach(([managerId, manager]) => {
-                        if (manager.owned) {
-                            this.roles.manager.employees[managerId].owned = true;
-                            // Update manager UI
-                            const button = document.getElementById(`hire${managerId}`);
-                            if (button) {
-                                button.classList.add('owned');
-                                button.disabled = true;
-                                button.innerHTML = `
-                                    <div class="manager-icon">
-                                        <i class="fas fa-user-tie"></i>
-                                    </div>
-                                    <div class="manager-info">
-                                        <span class="title">${this.getManagerTitle(managerId)}</span>
-                                        <div class="status">
-                                            <i class="fas fa-check-circle"></i>
-                                            Managing ${this.getTechnicianTitle(manager.manages)}
-                                        </div>
-                                    </div>
-                                `;
-                            }
-                            // Restart automation
-                            this.automateEmployee(managerId);
-                        }
-                    });
+                if (saveData.theme) {
+                    document.body.setAttribute('data-theme', saveData.theme);
                 }
-
-                // Update all displays
-                this.updateDisplay();
-                this.checkUnlocks();
-
-                // Calculate offline progress
-                if (loadedState.lastSaveTime) {
-                    const timeDiff = Date.now() - loadedState.lastSaveTime;
-                    this.calculateOfflineProgress(timeDiff);
-                }
-            } catch (error) {
-                console.error('Error loading save:', error);
+            } catch (e) {
+                // Ignore errors, start fresh
             }
         }
-    }
-
-    calculateOfflineProgress(timeDiff) {
-        // Convert time difference from milliseconds to seconds
-        const secondsOffline = timeDiff / 1000;
-        
-        // Calculate data generated while offline
-        const dps = this.calculateDataPerSecond();
-        const offlineData = Math.floor(dps * secondsOffline);
-        
-        if (offlineData > 0) {
-            this.data += offlineData;
-            this.showNotification(`While you were away, you generated ${offlineData} GB!`);
-        }
-    }
-
-    getSaveData() {
-        return {
-            version: '0.1.0', // Add version tracking
-            data: this.data,
-            clickValue: this.clickValue,
-            statistics: this.statistics,
-            roles: this.roles,
-            achievementBonuses: this.achievementBonuses,
-            settings: this.settings,
-            tutorialState: this.tutorialState,
-            lastSaveTime: Date.now()
-        };
-    }
-
-    loadSaveData(saveData) {
-        this.data = saveData.data;
-        this.clickValue = saveData.clickValue;
-        this.statistics = saveData.statistics;
-        this.roles = saveData.roles;
-        this.achievementBonuses = saveData.achievementBonuses;
-        
-        // Load settings if they exist in the save file
-        if (saveData.settings) {
-            this.settings = saveData.settings;
-            this.applySettings();
-        }
-        
-        this.updateDisplay();
-    }
-
-    applySettings() {
-        // Apply notification duration
-        if (document.getElementById('notificationDuration')) {
-            document.getElementById('notificationDuration').value = this.settings.notificationDuration;
-        }
-        
-        // Apply progress animation
-        if (document.getElementById('progressAnimation')) {
-            document.getElementById('progressAnimation').value = this.settings.progressAnimation;
-        }
-        
-        // Future: Apply theme and color scheme
-    }
-
-    // Add this method to help with debugging
-    debugSaveLoad() {
-        console.log('Current game state:', this.getSaveData());
-        console.log('Saved game state:', JSON.parse(localStorage.getItem('itEmpireSave')));
     }
 
     loadTutorialState() {
@@ -1266,9 +1116,93 @@ class Game {
             }
         });
     }
+
+    prestigeReset() {
+        if (this.prestige.available > 0) {
+            this.prestige.points += this.prestige.available;
+            this.data = 0;
+            this.clickValue = 1;
+            // Reset employees and upgrades
+            Object.values(this.roles.technician.employees).forEach(emp => { emp.owned = false; emp.automated = false; });
+            this.achievementBonuses = {};
+            this.prestige.available = 0;
+            this.updateDisplay();
+        }
+    }
+
+    setupHiringBar() {
+        this.hiringOptions.forEach(opt => {
+            const btn = document.getElementById(opt.btn);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    const cost = Math.floor(opt.cost * Math.pow(opt.costScale, opt.count));
+                    if (this.data >= cost) {
+                        this.data -= cost;
+                        opt.count++;
+                        this.updateDisplay();
+                        this.saveGame();
+                    }
+                });
+            }
+        });
+    }
+
+    renderITTeam() {
+        const teamPanel = document.querySelector('#employeesPanel .employee-grid');
+        if (!teamPanel) return;
+        teamPanel.innerHTML = '';
+        let hasAny = false;
+        this.hiringOptions.forEach(opt => {
+            if (opt.count > 0) {
+                hasAny = true;
+                const emp = document.createElement('div');
+                emp.className = 'employee-icon';
+                emp.title = opt.id;
+                emp.style = 'display:inline-block;margin:0.2rem;';
+                emp.innerHTML = `<i class="fas fa-user-tie" style="color:#3399ff;font-size:1.6rem;"></i><div style="font-size:0.8rem;color:#7a8ca3;text-align:center;">${opt.id} x${opt.count}</div>`;
+                teamPanel.appendChild(emp);
+            }
+        });
+        if (!hasAny) {
+            teamPanel.innerHTML = '<div style="color:#7a8ca3;font-size:1.1rem;text-align:center;">No employees hired yet.</div>';
+        }
+    }
 }
 
 // Create game instance when document is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.game = new Game();
+    // Fix Computer button functionality
+    const fixBtn = document.getElementById('fixComputer');
+    if (fixBtn) {
+        fixBtn.addEventListener('click', () => {
+            // Default click value is 1, can be replaced with game logic
+            let value = 1;
+            const valueSpan = document.getElementById('clickValue');
+            if (valueSpan) {
+                value = parseInt(valueSpan.textContent) || 1;
+            }
+            const dataSpan = document.getElementById('data');
+            let data = parseInt(dataSpan.textContent) || 0;
+            data += value;
+            dataSpan.textContent = data;
+        });
+    }
+    // Dark Mode toggle functionality
+    const themeBtn = document.getElementById('themeToggle');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            document.body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+        });
+    }
+    setupHiringBar();
+    setInterval(() => {
+        updateHiringBar();
+        // Passive income
+        let data = parseInt(document.getElementById('data').textContent) || 0;
+        data += this.totalPassiveProd / 5; // 5 times per second
+        document.getElementById('data').textContent = Math.floor(data);
+    }, 200);
+    updateHiringBar();
 }); 
