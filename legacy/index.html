@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Empire Idle - Root Labs</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="main-layout">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar-nav">
+            <button class="nav-button active" data-panel="employeesPanel">
+                <i class="fas fa-users"></i>
+                <span>Team</span>
+            </button>
+            <button class="nav-button" data-panel="upgradesPanel">
+                <i class="fas fa-arrow-up"></i>
+                <span>Upgrades</span>
+            </button>
+            <button class="nav-button" data-panel="researchPanel">
+                <i class="fas fa-flask"></i>
+                <span>Research</span>
+            </button>
+            <button class="nav-button" data-panel="achievementsPanel">
+                <i class="fas fa-trophy"></i>
+                <span>Achievements</span>
+            </button>
+            <button class="nav-button" data-panel="settingsPanel">
+                <i class="fas fa-cog"></i>
+                <span>Settings</span>
+            </button>
+            <button id="themeToggle" class="button sidebar-theme-toggle">
+                <i class="fas fa-moon"></i>
+            </button>
+        </nav>
+        <div class="content-area">
+            <!-- Top Bar Stats -->
+            <header class="top-bar">
+                <div class="logo">
+                    <i class="fas fa-network-wired"></i>
+                    <h1>IT Empire Idle</h1>
+                </div>
+                <div class="stats-bar">
+                    <div class="stat-card">
+                        <i class="fas fa-database stat-icon"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="data">0</span>
+                            <span class="stat-label">Data Points</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-tachometer-alt stat-icon"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="dataPerSecond">0</span>
+                            <span class="stat-label">Data/s</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-mouse-pointer stat-icon"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="clickValue">1</span>
+                            <span class="stat-label">Click Value</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="fas fa-star stat-icon"></i>
+                        <div class="stat-info">
+                            <span class="stat-value" id="reputation">0</span>
+                            <span class="stat-label">Reputation</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <!-- Main Game Area -->
+            <main class="game-main">
+                <div class="click-action card">
+                    <button id="fixComputer" class="button accent">
+                        <i class="fas fa-desktop"></i>
+                        <span>Fix Computer</span>
+                    </button>
+                </div>
+                <div class="game-panels">
+                    <!-- Employees Panel -->
+                    <div id="employeesPanel" class="panel active">
+                        <div class="panel-header">
+                            <h2><i class="fas fa-users"></i> IT Team</h2>
+                            <p>Build your IT empire by hiring and managing a team of professionals</p>
+                        </div>
+                        <div class="employee-grid"></div>
+                    </div>
+                    <!-- Upgrades Panel -->
+                    <div id="upgradesPanel" class="panel">
+                        <div class="panel-header">
+                            <h2><i class="fas fa-arrow-up"></i> Upgrades</h2>
+                            <p>Improve your IT infrastructure and team efficiency</p>
+                        </div>
+                        <div class="upgrade-grid"></div>
+                    </div>
+                    <!-- Research Panel -->
+                    <div id="researchPanel" class="panel">
+                        <div class="panel-header">
+                            <h2><i class="fas fa-flask"></i> Research</h2>
+                            <p>Unlock new technologies and advancements</p>
+                        </div>
+                        <div class="research-tree"></div>
+                    </div>
+                    <!-- Achievements Panel -->
+                    <div id="achievementsPanel" class="panel">
+                        <div class="panel-header">
+                            <h2><i class="fas fa-trophy"></i> Achievements</h2>
+                            <p>Track your progress and unlock rewards</p>
+                        </div>
+                        <div class="achievements-grid"></div>
+                    </div>
+                    <!-- Settings Panel -->
+                    <div id="settingsPanel" class="panel">
+                        <div class="panel-header">
+                            <h2><i class="fas fa-cog"></i> Settings</h2>
+                        </div>
+                        <div class="settings-grid">
+                            <div class="settings-group">
+                                <h3>Game Options</h3>
+                                <div class="setting-item">
+                                    <label for="notificationDuration">Notification Duration</label>
+                                    <select id="notificationDuration">
+                                        <option value="2000">2 seconds</option>
+                                        <option value="3000" selected>3 seconds</option>
+                                        <option value="5000">5 seconds</option>
+                                        <option value="0">Stay until closed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="settings-group">
+                                <h3>Game Data</h3>
+                                <div class="setting-buttons">
+                                    <button id="saveGame" class="button">
+                                        <i class="fas fa-save"></i>
+                                        Save Game
+                                    </button>
+                                    <button id="exportSave" class="button">
+                                        <i class="fas fa-download"></i>
+                                        Export Save
+                                    </button>
+                                    <button id="importSave" class="button">
+                                        <i class="fas fa-upload"></i>
+                                        Import Save
+                                    </button>
+                                    <button id="resetGame" class="button accent">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        Reset Game
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+        <!-- Hiring Bar -->
+        <div class="hiring-bar">
+            <div class="hire-card" id="hireTechCard">
+                <h3>Hire Tech</h3>
+                <div class="hire-info">
+                    <span class="hire-cost">100 Data Points</span>
+                    <span class="hire-prod">Generates 1 Data/s</span>
+                </div>
+                <button class="button hire-btn" id="hireTechBtn">Hire</button>
+            </div>
+            <div class="hire-card" id="hireSupervisorCard">
+                <h3>Hire Supervisor</h3>
+                <div class="hire-info">
+                    <span class="hire-cost">1,000 Data Points</span>
+                    <span class="hire-prod">Generates 10 Data/s</span>
+                </div>
+                <button class="button hire-btn" id="hireSupervisorBtn">Hire</button>
+            </div>
+            <div class="hire-card" id="hireDirectorCard">
+                <h3>Hire Director</h3>
+                <div class="hire-info">
+                    <span class="hire-cost">5,000 Data Points</span>
+                    <span class="hire-prod">Generates 50 Data/s</span>
+                </div>
+                <button class="button hire-btn" id="hireDirectorBtn">Hire</button>
+            </div>
+            <div class="hire-card" id="hireRegionalManagerCard">
+                <h3>Hire Regional Manager</h3>
+                <div class="hire-info">
+                    <span class="hire-cost">50,000 Data Points</span>
+                    <span class="hire-prod">Generates 500 Data/s</span>
+                </div>
+                <button class="button hire-btn" id="hireRegionalManagerBtn">Hire</button>
+            </div>
+        </div>
+    </div>
+    <div id="notificationContainer"></div>
+    <div id="confirmationModal" class="modal">
+        <div class="modal-content card">
+            <h3>Confirm Action</h3>
+            <p id="confirmationMessage"></p>
+            <div class="modal-buttons">
+                <button id="confirmYes" class="button accent">Yes</button>
+                <button id="confirmNo" class="button">No</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+    <script src="effects.js"></script>
+</body>
+</html> 

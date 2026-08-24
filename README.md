@@ -11,7 +11,7 @@ Formerly *IT Empire Idle*.
 No build step, no dependencies. Open:
 
 ```
-msp/index.html
+index.html
 ```
 
 That is the whole game — one self-contained HTML file.
@@ -20,8 +20,8 @@ That is the whole game — one self-contained HTML file.
 
 | Path | What it is |
 |---|---|
-| `msp/index.html` | **MSP Tycoon.** The current game. |
-| `index.html`, `game.js`, `styles.css`, `effects.js` | The previous build, kept for reference. |
+| `index.html` | **MSP Tycoon.** The current game. |
+| `legacy/` | The previous build, kept for reference. |
 
 They are independent and use separate save keys, so running one will not
 disturb the other's progress.

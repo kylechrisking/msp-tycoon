@@ -1,212 +1,883 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IT Empire Idle - Root Labs</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSP Tycoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#0B1017; --bg2:#0E141D; --panel:#141C27; --panel2:#1B2531; --line:#26323F;
+  --ink:#E6EDF5; --dim:#8A9AAC; --faint:#5A6878;
+  --accent:#3ED8D0; --accent-dark:#0E5C58; --accent-ink:#05201F;
+  --ok:#4ADE80; --warn:#FBBF24; --crit:#F87171; --cash:#7DD3A0;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --sans:"Outfit",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  min-height:100vh;overflow-x:hidden;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(62,216,208,.07),transparent);
+}
+/* Ambient datacenter floor. Cookie Clicker rises milk as you progress;
+   here the room fills with racks as you hire, and the floor level climbs
+   toward an exit. Purely decorative, so it is aria-hidden and sits behind
+   everything. */
+#floor{position:fixed;left:0;right:0;bottom:0;width:100%;height:38vh;z-index:0;pointer-events:none}
+.app{position:relative;z-index:1}
+
+button{font-family:inherit;color:inherit;border:none;background:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:minmax(0,1fr) 384px;min-height:100vh}
+@media(max-width:900px){.app{grid-template-columns:1fr}}
+
+.main{display:flex;flex-direction:column;align-items:center;padding:22px 24px 40px;gap:20px}
+
+.brand{display:flex;align-items:center;gap:10px;align-self:flex-start}
+.brand-mark{
+  width:30px;height:30px;border-radius:7px;background:var(--accent);
+  color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.brand-name{font-weight:600;font-size:17px;letter-spacing:-.01em}
+.brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+
+/* ---------- revenue ---------- */
+.readout{text-align:center;margin-top:6px}
+.cash{
+  font-family:var(--mono);font-weight:700;font-size:clamp(34px,6vw,54px);
+  color:var(--cash);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05;
+}
+.rate{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+
+/* ---------- the click target ---------- */
+.ticket-wrap{position:relative;display:grid;place-items:center;padding:6px 0 2px}
+.ticket{
+  width:min(300px,72vw);aspect-ratio:1;border-radius:26px;
+  background:linear-gradient(160deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  transition:transform .07s ease,box-shadow .2s ease,border-color .2s ease;
+  box-shadow:0 18px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);
+  position:relative;overflow:hidden;
+}
+.ticket::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 22%,rgba(62,216,208,.16),transparent 62%);
+  opacity:0;transition:opacity .2s;
+}
+.ticket:hover{border-color:var(--accent-dark);transform:translateY(-2px)}
+.ticket:hover::after{opacity:1}
+.ticket:active{transform:scale(.97) translateY(0)}
+.ticket-icon{font-size:52px;line-height:1}
+.ticket-label{font-weight:600;font-size:19px;letter-spacing:-.01em}
+.ticket-hint{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.ticket-worth{font-family:var(--mono);font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
+
+/* floating +$ */
+.float{
+  position:absolute;font-family:var(--mono);font-weight:700;font-size:17px;color:var(--cash);
+  pointer-events:none;animation:rise 1s ease-out forwards;text-shadow:0 2px 8px rgba(0,0,0,.6);
+}
+@keyframes rise{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-64px)}}
+@media(prefers-reduced-motion:reduce){
+  .float{animation-duration:.01ms}
+  .ticket,.ticket:hover,.ticket:active{transition:none;transform:none}
+}
+
+/* ---------- stat strip ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px;width:min(520px,100%)}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+.stat-v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+
+/* ---------- prestige (lives in the store as the Exit tab) ---------- */
+.prestige-card{
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+  border-radius:10px;padding:16px 17px;display:flex;flex-direction:column;gap:12px;
+}
+.pc-h{font-weight:600;font-size:16px}
+.pc-b{font-size:12.5px;color:var(--dim);line-height:1.55}
+.pc-rows{display:flex;flex-direction:column;gap:1px;background:var(--line);border-radius:8px;overflow:hidden}
+.pc-row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  background:var(--bg2);padding:9px 12px;font-size:12.5px;color:var(--dim);
+}
+.pc-row b{font-family:var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.pc-row b.pc-good{color:var(--warn)}
+.pc-go{width:100%;text-align:center}
+.pc-lock{
+  font-family:var(--mono);font-size:11.5px;color:var(--faint);
+  text-align:center;line-height:1.7;padding:9px;border:1px dashed var(--line);border-radius:8px;
+}
+.btn{
+  background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;
+  padding:9px 16px;border-radius:8px;white-space:nowrap;transition:filter .15s;
+}
+.btn:hover:not(:disabled){filter:brightness(1.1)}
+.btn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
+.btn-warn{background:var(--warn);color:#3A2A05}
+
+/* ---------- store ---------- */
+.store{background:var(--bg2);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+@media(max-width:900px){.store{height:auto;position:static;border-left:none;border-top:1px solid var(--line)}}
+.tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
+.tab{
+  flex:1;padding:13px 8px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);border-bottom:2px solid transparent;transition:color .15s;
+}
+.tab:hover{color:var(--dim)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .badge{
+  display:inline-block;margin-left:5px;background:var(--accent);color:var(--accent-ink);
+  border-radius:9px;padding:0 5px;font-size:9.5px;font-weight:700;
+}
+.list{overflow-y:auto;flex:1;padding:9px;display:flex;flex-direction:column;gap:7px}
+
+.item{
+  width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:11px 13px;display:grid;grid-template-columns:38px 1fr auto;
+  gap:11px;align-items:center;transition:border-color .15s,background .15s;
+}
+.item:hover:not(:disabled){border-color:var(--accent-dark);background:var(--panel2)}
+/* Only .72: at .42 an unaffordable row read as an empty panel, and a new
+   player with $0 thought the Staff tab had nothing in it. */
+.item:disabled{opacity:.72;cursor:not-allowed}
+/* Locked tiers read as "not yet" rather than "broken". */
+.item.locked{opacity:.45;border-style:dashed}
+.item.locked .item-ic{background:transparent;font-size:15px}
+
+/* Owned count, drawn as pips -- one per hire, so a glance tells you the
+   shape of your team without reading digits. */
+.pips{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;align-items:center}
+.pip{width:6px;height:9px;border-radius:1.5px;background:var(--accent);opacity:.85}
+.pip.mgr{background:var(--warn)}
+.pips .more{
+  font-family:var(--mono);font-size:9.5px;color:var(--dim);margin-left:3px;
+  font-variant-numeric:tabular-nums;
+}
+.item-ic{
+  width:38px;height:38px;border-radius:9px;background:var(--panel2);
+  display:grid;place-items:center;font-size:19px;
+}
+.item-n{font-weight:600;font-size:14px;letter-spacing:-.005em}
+.item-m{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:2px;font-variant-numeric:tabular-nums}
+.item-r{text-align:right}
+.item-c{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--cash);font-variant-numeric:tabular-nums}
+.item-c.cant{color:var(--crit)}
+.item-o{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
+.empty{padding:32px 18px;text-align:center;color:var(--faint);font-size:13px;line-height:1.6}
+
+.toast-wrap{position:fixed;bottom:18px;left:18px;display:flex;flex-direction:column;gap:7px;z-index:50}
+.toast{
+  background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:10px 15px;font-size:13px;animation:slide .3s ease-out;max-width:300px;
+}
+@keyframes slide{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+
+.bar{display:flex;gap:7px;padding:9px;border-top:1px solid var(--line);flex-shrink:0}
+.mini{
+  flex:1;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);padding:7px;border:1px solid var(--line);border-radius:7px;transition:color .15s,border-color .15s;
+}
+.mini:hover{color:var(--accent);border-color:var(--accent-dark)}
+</style>
 </head>
 <body>
-    <div class="main-layout">
-        <!-- Sidebar Navigation -->
-        <nav class="sidebar-nav">
-            <button class="nav-button active" data-panel="employeesPanel">
-                <i class="fas fa-users"></i>
-                <span>Team</span>
-            </button>
-            <button class="nav-button" data-panel="upgradesPanel">
-                <i class="fas fa-arrow-up"></i>
-                <span>Upgrades</span>
-            </button>
-            <button class="nav-button" data-panel="researchPanel">
-                <i class="fas fa-flask"></i>
-                <span>Research</span>
-            </button>
-            <button class="nav-button" data-panel="achievementsPanel">
-                <i class="fas fa-trophy"></i>
-                <span>Achievements</span>
-            </button>
-            <button class="nav-button" data-panel="settingsPanel">
-                <i class="fas fa-cog"></i>
-                <span>Settings</span>
-            </button>
-            <button id="themeToggle" class="button sidebar-theme-toggle">
-                <i class="fas fa-moon"></i>
-            </button>
-        </nav>
-        <div class="content-area">
-            <!-- Top Bar Stats -->
-            <header class="top-bar">
-                <div class="logo">
-                    <i class="fas fa-network-wired"></i>
-                    <h1>IT Empire Idle</h1>
-                </div>
-                <div class="stats-bar">
-                    <div class="stat-card">
-                        <i class="fas fa-database stat-icon"></i>
-                        <div class="stat-info">
-                            <span class="stat-value" id="data">0</span>
-                            <span class="stat-label">Data Points</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <i class="fas fa-tachometer-alt stat-icon"></i>
-                        <div class="stat-info">
-                            <span class="stat-value" id="dataPerSecond">0</span>
-                            <span class="stat-label">Data/s</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <i class="fas fa-mouse-pointer stat-icon"></i>
-                        <div class="stat-info">
-                            <span class="stat-value" id="clickValue">1</span>
-                            <span class="stat-label">Click Value</span>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <i class="fas fa-star stat-icon"></i>
-                        <div class="stat-info">
-                            <span class="stat-value" id="reputation">0</span>
-                            <span class="stat-label">Reputation</span>
-                        </div>
-                    </div>
-                </div>
-            </header>
-            <!-- Main Game Area -->
-            <main class="game-main">
-                <div class="click-action card">
-                    <button id="fixComputer" class="button accent">
-                        <i class="fas fa-desktop"></i>
-                        <span>Fix Computer</span>
-                    </button>
-                </div>
-                <div class="game-panels">
-                    <!-- Employees Panel -->
-                    <div id="employeesPanel" class="panel active">
-                        <div class="panel-header">
-                            <h2><i class="fas fa-users"></i> IT Team</h2>
-                            <p>Build your IT empire by hiring and managing a team of professionals</p>
-                        </div>
-                        <div class="employee-grid"></div>
-                    </div>
-                    <!-- Upgrades Panel -->
-                    <div id="upgradesPanel" class="panel">
-                        <div class="panel-header">
-                            <h2><i class="fas fa-arrow-up"></i> Upgrades</h2>
-                            <p>Improve your IT infrastructure and team efficiency</p>
-                        </div>
-                        <div class="upgrade-grid"></div>
-                    </div>
-                    <!-- Research Panel -->
-                    <div id="researchPanel" class="panel">
-                        <div class="panel-header">
-                            <h2><i class="fas fa-flask"></i> Research</h2>
-                            <p>Unlock new technologies and advancements</p>
-                        </div>
-                        <div class="research-tree"></div>
-                    </div>
-                    <!-- Achievements Panel -->
-                    <div id="achievementsPanel" class="panel">
-                        <div class="panel-header">
-                            <h2><i class="fas fa-trophy"></i> Achievements</h2>
-                            <p>Track your progress and unlock rewards</p>
-                        </div>
-                        <div class="achievements-grid"></div>
-                    </div>
-                    <!-- Settings Panel -->
-                    <div id="settingsPanel" class="panel">
-                        <div class="panel-header">
-                            <h2><i class="fas fa-cog"></i> Settings</h2>
-                        </div>
-                        <div class="settings-grid">
-                            <div class="settings-group">
-                                <h3>Game Options</h3>
-                                <div class="setting-item">
-                                    <label for="notificationDuration">Notification Duration</label>
-                                    <select id="notificationDuration">
-                                        <option value="2000">2 seconds</option>
-                                        <option value="3000" selected>3 seconds</option>
-                                        <option value="5000">5 seconds</option>
-                                        <option value="0">Stay until closed</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="settings-group">
-                                <h3>Game Data</h3>
-                                <div class="setting-buttons">
-                                    <button id="saveGame" class="button">
-                                        <i class="fas fa-save"></i>
-                                        Save Game
-                                    </button>
-                                    <button id="exportSave" class="button">
-                                        <i class="fas fa-download"></i>
-                                        Export Save
-                                    </button>
-                                    <button id="importSave" class="button">
-                                        <i class="fas fa-upload"></i>
-                                        Import Save
-                                    </button>
-                                    <button id="resetGame" class="button accent">
-                                        <i class="fas fa-exclamation-triangle"></i>
-                                        Reset Game
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-        <!-- Hiring Bar -->
-        <div class="hiring-bar">
-            <div class="hire-card" id="hireTechCard">
-                <h3>Hire Tech</h3>
-                <div class="hire-info">
-                    <span class="hire-cost">100 Data Points</span>
-                    <span class="hire-prod">Generates 1 Data/s</span>
-                </div>
-                <button class="button hire-btn" id="hireTechBtn">Hire</button>
-            </div>
-            <div class="hire-card" id="hireSupervisorCard">
-                <h3>Hire Supervisor</h3>
-                <div class="hire-info">
-                    <span class="hire-cost">1,000 Data Points</span>
-                    <span class="hire-prod">Generates 10 Data/s</span>
-                </div>
-                <button class="button hire-btn" id="hireSupervisorBtn">Hire</button>
-            </div>
-            <div class="hire-card" id="hireDirectorCard">
-                <h3>Hire Director</h3>
-                <div class="hire-info">
-                    <span class="hire-cost">5,000 Data Points</span>
-                    <span class="hire-prod">Generates 50 Data/s</span>
-                </div>
-                <button class="button hire-btn" id="hireDirectorBtn">Hire</button>
-            </div>
-            <div class="hire-card" id="hireRegionalManagerCard">
-                <h3>Hire Regional Manager</h3>
-                <div class="hire-info">
-                    <span class="hire-cost">50,000 Data Points</span>
-                    <span class="hire-prod">Generates 500 Data/s</span>
-                </div>
-                <button class="button hire-btn" id="hireRegionalManagerBtn">Hire</button>
-            </div>
-        </div>
+
+<canvas id="floor" aria-hidden="true"></canvas>
+
+<div class="app">
+  <main class="main">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MSP Tycoon</div>
+        <div class="brand-sub">Managed Service Provider</div>
+      </div>
     </div>
-    <div id="notificationContainer"></div>
-    <div id="confirmationModal" class="modal">
-        <div class="modal-content card">
-            <h3>Confirm Action</h3>
-            <p id="confirmationMessage"></p>
-            <div class="modal-buttons">
-                <button id="confirmYes" class="button accent">Yes</button>
-                <button id="confirmNo" class="button">No</button>
-            </div>
-        </div>
+
+    <div class="readout">
+      <div class="cash" id="cash">$0</div>
+      <div class="rate" id="rate">$0.0 / sec</div>
     </div>
-    <script src="game.js"></script>
-    <script src="effects.js"></script>
+
+    <div class="ticket-wrap" id="ticketWrap">
+      <button class="ticket" id="ticket" aria-label="Close a support ticket">
+        <span class="ticket-icon">🎫</span>
+        <span class="ticket-label">Close a Ticket</span>
+        <span class="ticket-worth" id="clickWorth">+$1</span>
+        <span class="ticket-hint" id="ticketHint">click, or press space</span>
+      </button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-k">Tickets</div><div class="stat-v" id="sTickets">0</div></div>
+      <div class="stat"><div class="stat-k">Staff</div><div class="stat-v" id="sStaff">0</div></div>
+      <div class="stat"><div class="stat-k">Lifetime</div><div class="stat-v" id="sLife">$0</div></div>
+      <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
+    </div>
+
+  </main>
+
+  <aside class="store">
+    <div class="tabs">
+      <button class="tab on" data-tab="staff">Staff</button>
+      <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
+      <button class="tab" data-tab="prestige">Exit <span class="badge" id="prBadge" style="display:none">!</span></button>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="bar">
+      <button class="mini" id="saveBtn">Save</button>
+      <button class="mini" id="wipeBtn">Wipe</button>
+    </div>
+  </aside>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   MSP Tycoon
+
+   Deliberate architecture notes, since the previous build was undone
+   by exactly these things:
+
+   - ONE interval owns the simulation. Nothing else advances state.
+   - State never round-trips through the DOM. The DOM is written to,
+     never read from, as a source of truth.
+   - STAFF and UPGRADES are static config and are never serialised.
+     The save file carries only counts and flags, so the economy can be
+     rebalanced and new content added without breaking existing saves.
+   ============================================================ */
+
+/* ---------- static config (never saved) ---------- */
+const STAFF = [
+  {id:"helpdesk", name:"Help Desk Tech",   icon:"🎧", cost:15,        rate:0.1,   blurb:"Password resets, mostly."},
+  {id:"sysadmin", name:"Sysadmin",         icon:"🖥️", cost:100,       rate:1,     blurb:"Keeps the servers breathing."},
+  {id:"neteng",   name:"Network Engineer", icon:"🌐", cost:1100,      rate:8,     blurb:"It's always DNS."},
+  {id:"seceng",   name:"Security Analyst", icon:"🛡️", cost:12000,     rate:47,    blurb:"Catches things before they bill."},
+  {id:"cloud",    name:"Cloud Architect",  icon:"☁️", cost:130000,    rate:260,   blurb:"Migrates it, then re-migrates it."},
+  {id:"vcio",     name:"vCIO",             icon:"📊", cost:1400000,   rate:1400,  blurb:"Turns roadmaps into retainers."},
+  {id:"noc",      name:"24/7 NOC",         icon:"🌙", cost:20000000,  rate:7800,  blurb:"Someone is always awake."},
+  {id:"branch",   name:"Second Branch",    icon:"🏢", cost:330000000, rate:44000, blurb:"A whole other office."}
+];
+
+// kind: "staff" doubles one staff line; "click" doubles click value;
+// "global" boosts everything; "hold" unlocks hold-to-work; "holdspeed"
+// makes holding faster.
+const UPGRADES = [
+  {id:"macros",    name:"Ticket Macros",      icon:"⚡", cost:100,        kind:"click",  mult:2, need:()=>S.clicks>=25,           blurb:"Canned replies. Double click value."},
+  {id:"queue",     name:"Queue Runner",       icon:"⏩", cost:400,        kind:"hold",           need:()=>S.clicks>=60,           blurb:"Hold to keep pulling tickets, one a second."},
+  {id:"dispatch",  name:"Auto-Dispatcher",    icon:"🛰️", cost:15000,      kind:"holdspeed", mult:2, need:()=>!!S.upgrades.queue && S.clicks>=200, blurb:"Holding works twice as fast."},
+  {id:"swarm",     name:"Swarm Triage",       icon:"🐝", cost:400000,     kind:"holdspeed", mult:2.5, need:()=>!!S.upgrades.dispatch,             blurb:"Holding works far faster again."},
+  {id:"kb",        name:"Knowledge Base",     icon:"📚", cost:500,        kind:"staff",  target:"helpdesk", mult:2, need:()=>c("helpdesk")>=5,  blurb:"Help Desk output doubled."},
+  {id:"rmm",       name:"RMM Agent",          icon:"🔧", cost:2500,       kind:"staff",  target:"sysadmin", mult:2, need:()=>c("sysadmin")>=5,  blurb:"Sysadmin output doubled."},
+  {id:"scripts",   name:"Automation Scripts", icon:"📜", cost:5000,       kind:"click",  mult:2, need:()=>S.clicks>=100,          blurb:"Double click value again."},
+  {id:"monitor",   name:"Monitoring Stack",   icon:"📡", cost:20000,      kind:"staff",  target:"neteng", mult:2, need:()=>c("neteng")>=5,      blurb:"Network Engineer output doubled."},
+  {id:"psa",       name:"PSA Platform",       icon:"🗂️", cost:75000,      kind:"global", mult:1.25, need:()=>S.staffTotal>=25,    blurb:"All staff +25%."},
+  {id:"siem",      name:"SIEM",               icon:"🔎", cost:250000,     kind:"staff",  target:"seceng", mult:2, need:()=>c("seceng")>=5,      blurb:"Security output doubled."},
+  {id:"soc2",      name:"SOC 2 Report",       icon:"📋", cost:1200000,    kind:"global", mult:1.5,  need:()=>S.staffTotal>=50,    blurb:"Enterprise clients. All staff +50%."},
+  {id:"iac",       name:"Infrastructure as Code", icon:"🧱", cost:6000000, kind:"staff", target:"cloud", mult:2, need:()=>c("cloud")>=5,      blurb:"Cloud output doubled."},
+  {id:"ai",        name:"AI Triage",          icon:"🤖", cost:40000000,   kind:"global", mult:2, need:()=>S.staffTotal>=100,      blurb:"All staff doubled."}
+];
+
+const SAVE_KEY = "mspTycoonSave";
+const TICK_MS  = 100;               // one loop, 10Hz
+const PRESTIGE_MIN = 1e6;           // lifetime revenue before an exit is allowed
+
+/* ---------- mutable state (this, and only this, is saved) ---------- */
+let S = {
+  v: 1,
+  cash: 0,
+  lifetime: 0,
+  clicks: 0,
+  staff: {},                 // id -> count
+  staffTotal: 0,
+  upgrades: {},              // id -> true
+  reputation: 0,             // permanent prestige currency
+  lastSeen: Date.now()
+};
+
+const c = id => S.staff[id] || 0;
+
+/* ---------- number formatting ---------- */
+const UNITS = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc"];
+
+function scale(n){
+  let t = 0;
+  while(n >= 1000 && t < UNITS.length - 1){ n /= 1000; t++; }
+  const dp = n < 10 ? 2 : n < 100 ? 1 : 0;
+  // toFixed can round 999.99 up to "1000"; step the unit so the display
+  // never reads "1000K" where "1.00M" is meant.
+  if(+n.toFixed(dp) >= 1000 && t < UNITS.length - 1){ n /= 1000; t++; }
+  return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + UNITS[t];
+}
+
+// Counts (staff, tickets, reputation) are whole things and never fractional.
+function fmt(n){
+  if(!isFinite(n)) return "0";
+  return n < 1000 ? Math.floor(n).toString() : scale(n);
+}
+
+// Money keeps cents until $1,000 so early clicks visibly move the number,
+// then abbreviates once the digits stop being meaningful.
+function money(n){
+  if(!isFinite(n)) return "$0.00";
+  if(n < 1000){
+    return (+n.toFixed(2) >= 1000) ? "$" + scale(n) : "$" + n.toFixed(2);
+  }
+  return "$" + scale(n);
+}
+
+// Rates read better with one decimal in the low range.
+function rateStr(n){
+  if(!isFinite(n)) return "0";
+  return n < 100 ? (Math.round(n * 10) / 10).toString() : scale(n);
+}
+
+/* ---------- derived economy (pure functions of state + config) ---------- */
+function costOf(def){
+  // Cookie Clicker's proven curve: each copy costs 15% more than the last.
+  return Math.ceil(def.cost * Math.pow(1.15, c(def.id)));
+}
+function repMult(){ return 1 + S.reputation * 0.02; }   // +2% per reputation
+
+function rateOf(def){
+  let r = def.rate * c(def.id);
+  if(!r) return 0;
+  UPGRADES.forEach(u=>{
+    if(!S.upgrades[u.id]) return;
+    if(u.kind === "staff"  && u.target === def.id) r *= u.mult;
+    if(u.kind === "global") r *= u.mult;
+  });
+  return r * repMult();
+}
+const totalRate = () => STAFF.reduce((s,d)=>s + rateOf(d), 0);
+
+function clickValue(){
+  let v = 1;
+  UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "click") v *= u.mult; });
+  // Clicking stays relevant: it scales with a slice of passive income.
+  // Floored to whole cents so a "double click value" upgrade reads as
+  // exactly double ($2.00) instead of $2.005 rounding up to $2.01.
+  return Math.floor((v + totalRate() * 0.05) * repMult() * 100) / 100;
+}
+
+function pendingRep(){
+  if(S.lifetime < PRESTIGE_MIN) return 0;
+  return Math.floor(Math.sqrt(S.lifetime / PRESTIGE_MIN)) - S.reputation;
+}
+
+/* ---------- rendering ---------- */
+let tab = "staff";
+const $ = id => document.getElementById(id);
+
+function renderHead(){
+  $("cash").textContent = money(S.cash);
+  $("rate").textContent = "$" + rateStr(totalRate()) + " / sec";
+  $("clickWorth").textContent = "+" + money(clickValue());
+  const hint = $("ticketHint");
+  if(hint){
+    hint.textContent = canHold()
+      ? "click, or hold — " + rateStr(1000 / holdInterval()) + "/sec"
+      : "click, or press space";
+  }
+  $("sTickets").textContent = fmt(S.clicks);
+  $("sStaff").textContent = fmt(S.staffTotal);
+  $("sLife").textContent = money(S.lifetime);
+  $("sRep").textContent = fmt(S.reputation);
+
+  // The Exit tab flags itself when an exit is actually available.
+  const prBadge = $("prBadge");
+  prBadge.style.display = pendingRep() > 0 ? "inline-block" : "none";
+
+  const avail = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need() && S.cash >= u.cost).length;
+  const badge = $("upBadge");
+  badge.style.display = avail ? "inline-block" : "none";
+  badge.textContent = avail;
+}
+
+/* One pip per hire, capped so a hundred staff cannot blow out the row --
+   past the cap the remainder is shown as a count instead. */
+const PIP_CAP = 20;
+function pipsFor(n){
+  if(!n) return "";
+  const shown = Math.min(n, PIP_CAP);
+  let html = "";
+  for(let i = 0; i < shown; i++) html += '<span class="pip"></span>';
+  if(n > PIP_CAP) html += '<span class="more">+' + fmt(n - PIP_CAP) + '</span>';
+  return html;
+}
+
+/* The store is rebuilt only when the *set* of visible rows changes.
+   Affordability changes every tick, so that is applied separately by
+   refreshAffordability() -- rebuilding this DOM ten times a second would
+   flicker and steal clicks mid-press. */
+let listSig = "";
+
+function listSignature(){
+  if(tab === "staff"){
+    // Includes lock state, so unlocking a tier rebuilds the row rather
+    // than leaving a stale padlock in place.
+    return "s|" + STAFF.map((d,i)=>{
+      const unlocked = i === 0 || c(STAFF[i-1].id) > 0;
+      return d.id + ":" + c(d.id) + ":" + (unlocked ? 1 : 0);
+    }).join(",");
+  }
+  if(tab === "prestige"){
+    // Rebuild as the headline numbers move, but not every tick.
+    return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000);
+  }
+  return "u|" + UPGRADES.filter(u=>!S.upgrades[u.id] && u.need()).map(u=>u.id).join(",");
+}
+
+function refreshAffordability(){
+  document.querySelectorAll("#list .item").forEach(el=>{
+    const kind = el.dataset.kind, id = el.dataset.id;
+    let cost;
+    if(kind === "staff"){
+      const d = STAFF.find(x=>x.id===id); if(!d) return;
+      cost = costOf(d);
+      const rateEl = el.querySelector(".js-rate");
+      if(rateEl) rateEl.textContent = c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "";
+      const ownEl = el.querySelector(".item-o");
+      if(ownEl) ownEl.textContent = c(d.id);
+      // Pips are cheap to diff by count, and rebuilding the row on every
+      // hire would fight the signature cache.
+      const pipEl = el.querySelector(".js-pips");
+      if(pipEl && +pipEl.dataset.n !== c(d.id)){
+        pipEl.dataset.n = c(d.id);
+        pipEl.innerHTML = pipsFor(c(d.id));
+      }
+    } else {
+      const u = UPGRADES.find(x=>x.id===id); if(!u) return;
+      cost = u.cost;
+    }
+    // A locked row must stay disabled however much cash is on hand;
+    // affordability alone is not permission to buy.
+    const locked = el.classList.contains("locked");
+    const afford = S.cash >= cost;
+    el.disabled = locked || !afford;
+    const costEl = el.querySelector(".item-c");
+    if(costEl){
+      costEl.textContent = money(cost);
+      costEl.classList.toggle("cant", locked || !afford);
+    }
+  });
+}
+
+function renderList(force){
+  const sig = listSignature();
+  if(!force && sig === listSig){ refreshAffordability(); return; }
+  listSig = sig;
+
+  const list = $("list");
+  list.innerHTML = "";
+
+  if(tab === "staff"){
+    // Every tier is listed. Ones you have not unlocked yet are shown
+    // locked, with the reason -- hiding them entirely meant a player
+    // holding $122 could see no way to spend it and no hint why.
+    STAFF.forEach((d,i)=>{
+      const unlocked = i === 0 || c(STAFF[i-1].id) > 0;
+      const cost = costOf(d);
+      const afford = S.cash >= cost;
+      const b = document.createElement("button");
+      b.className = "item" + (unlocked ? "" : " locked");
+      b.dataset.kind = "staff";
+      b.dataset.id = d.id;
+      b.disabled = !unlocked || !afford;
+
+      if(unlocked){
+        b.innerHTML =
+          '<div class="item-ic">' + d.icon + '</div>' +
+          '<div><div class="item-n">' + d.name + '</div>' +
+          '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div>' +
+          '<div class="pips js-pips">' + pipsFor(c(d.id)) + '</div></div>' +
+          '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
+          '<div class="item-o">' + c(d.id) + '</div></div>';
+        b.onclick = () => buyStaff(d);
+      } else {
+        b.innerHTML =
+          '<div class="item-ic">🔒</div>' +
+          '<div><div class="item-n">' + d.name + '</div>' +
+          '<div class="item-m">Hire a ' + STAFF[i-1].name + ' to unlock</div></div>' +
+          '<div class="item-r"><div class="item-c cant">' + money(cost) + '</div></div>';
+      }
+      list.appendChild(b);
+    });
+  } else if(tab === "prestige"){
+    const p = pendingRep();
+    const box = document.createElement("div");
+    box.className = "prestige-card";
+    box.innerHTML =
+      '<div class="pc-h">Sell the company</div>' +
+      '<div class="pc-b">Walk away, bank the reputation, and start the next one with everything you learned. ' +
+      'Cash, staff and upgrades reset. Reputation is permanent and applies to every future run.</div>' +
+      '<div class="pc-rows">' +
+        '<div class="pc-row"><span>Reputation held</span><b>' + fmt(S.reputation) + '</b></div>' +
+        '<div class="pc-row"><span>Current bonus</span><b>+' + (S.reputation*2) + '%</b></div>' +
+        '<div class="pc-row"><span>Lifetime revenue</span><b>' + money(S.lifetime) + '</b></div>' +
+        '<div class="pc-row"><span>Exit is worth</span><b class="' + (p>0?"pc-good":"") + '">' + fmt(p) + ' rep</b></div>' +
+      '</div>' +
+      (p > 0
+        ? '<button class="btn btn-warn pc-go" id="prestigeBtn">Sell for ' + fmt(p) + ' reputation</button>'
+        : '<div class="pc-lock">Reach ' + money(PRESTIGE_MIN) + ' lifetime revenue to make an exit worthwhile.<br>' +
+          money(Math.max(0, PRESTIGE_MIN - S.lifetime)) + ' to go.</div>');
+    list.appendChild(box);
+    const go = $("prestigeBtn");
+    if(go) go.onclick = prestige;
+    return;
+  } else {
+    const show = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need());
+    if(!show.length){
+      list.innerHTML = '<div class="empty">No upgrades available yet.<br>Hire more staff and close more tickets.</div>';
+      return;
+    }
+    show.forEach(u=>{
+      const afford = S.cash >= u.cost;
+      const b = document.createElement("button");
+      b.className = "item";
+      b.dataset.kind = "upgrade";
+      b.dataset.id = u.id;
+      b.disabled = !afford;
+      b.innerHTML =
+        '<div class="item-ic">' + u.icon + '</div>' +
+        '<div><div class="item-n">' + u.name + '</div><div class="item-m">' + u.blurb + '</div></div>' +
+        '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(u.cost) + '</div></div>';
+      b.onclick = () => buyUpgrade(u);
+      list.appendChild(b);
+    });
+  }
+}
+
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+
+/* ---------- actions ---------- */
+function earn(n){ S.cash += n; S.lifetime += n; }
+
+function closeTicket(x, y){
+  const v = clickValue();
+  earn(v);
+  S.clicks++;
+  if(x !== undefined){
+    const f = document.createElement("div");
+    f.className = "float";
+    f.textContent = "+" + money(v);
+    f.style.left = x + "px";
+    f.style.top  = y + "px";
+    $("ticketWrap").appendChild(f);
+    setTimeout(()=>f.remove(), 1000);
+  }
+  renderHead();
+}
+
+function buyStaff(d){
+  const cost = costOf(d);
+  if(S.cash < cost) return;
+  S.cash -= cost;
+  S.staff[d.id] = c(d.id) + 1;
+  S.staffTotal++;
+  if(S.staff[d.id] === 1) toast("Hired your first " + d.name + ".");
+  renderHead(); renderList();
+}
+
+function buyUpgrade(u){
+  if(S.cash < u.cost || S.upgrades[u.id]) return;
+  S.cash -= u.cost;
+  S.upgrades[u.id] = true;
+  // A speed change while the button is already down should apply now, not
+  // after the player lets go. The interval has to be rebuilt to re-read it.
+  if((u.kind === "hold" || u.kind === "holdspeed") && holdTimer && lastHoldPos){
+    stopHold();
+    startHold(lastHoldPos);
+  }
+  toast(u.name + " acquired.");
+  renderHead(); renderList();
+}
+
+function prestige(){
+  const p = pendingRep();
+  if(p <= 0) return;
+  if(!confirm("Sell the company for " + fmt(p) + " reputation?\n\nCash, staff and upgrades reset. Reputation is permanent.")) return;
+  S.reputation += p;
+  S.cash = 0; S.staff = {}; S.staffTotal = 0; S.upgrades = {};
+  // lifetime deliberately persists: it is the record of everything ever built.
+  toast("Acquired. +" + fmt(p) + " reputation.");
+  renderHead(); renderList(); save();
+}
+
+/* ---------- persistence (mutable state only) ---------- */
+function save(){
+  S.lastSeen = Date.now();
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }
+  catch(e){ console.error("save failed", e); }
+}
+
+function load(){
+  let raw;
+  try{ raw = localStorage.getItem(SAVE_KEY); }catch(e){ return; }
+  if(!raw) return;
+  let d;
+  try{ d = JSON.parse(raw); }catch(e){ console.error("corrupt save, ignoring"); return; }
+  if(!d || typeof d !== "object") return;
+
+  // Merge field by field. Never assign the object wholesale -- that is how a
+  // save from an older version silently deletes fields added since.
+  S.cash       = +d.cash       || 0;
+  S.lifetime   = +d.lifetime   || 0;
+  S.clicks     = +d.clicks     || 0;
+  S.reputation = +d.reputation || 0;
+  S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
+  S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
+  S.lastSeen   = +d.lastSeen || Date.now();
+
+  // Drop ids that no longer exist, so removing content cannot corrupt a save.
+  Object.keys(S.staff).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.staff[k]; });
+  Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
+
+  S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
+
+  // Offline earnings, capped at 8h so leaving it a month isn't a free win.
+  const away = Math.min((Date.now() - S.lastSeen) / 1000, 8*3600);
+  if(away > 60){
+    const gained = totalRate() * away;
+    if(gained > 0){
+      earn(gained);
+      setTimeout(()=>toast("While you were out: " + money(gained)), 500);
+    }
+  }
+}
+
+/* ---------- wiring ---------- */
+/* Click, or hold. Holding runs on our own interval rather than relying on
+   the OS key-repeat rate, which is slow, differs per machine, and does not
+   exist at all for a held mouse button. */
+// Holding is earned, not free: it arrives with Queue Runner and speeds up
+// with later upgrades. Base cadence is one ticket a second -- deliberately
+// slower than a person can click, so holding is the lazy option rather than
+// the optimal one.
+const HOLD_BASE_MS = 1000;
+let holdTimer = null;
+
+const canHold = () => !!S.upgrades.queue;
+function holdInterval(){
+  let ms = HOLD_BASE_MS;
+  UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "holdspeed") ms /= u.mult; });
+  return Math.max(60, ms);
+}
+
+function ticketCentre(){
+  const r = $("ticket").getBoundingClientRect(), w = $("ticketWrap").getBoundingClientRect();
+  return [r.left - w.left + r.width/2, r.top - w.top + r.height/2];
+}
+let lastHoldPos = null;
+function startHold(getPos){
+  if(holdTimer || !canHold()) return;
+  lastHoldPos = getPos;
+  holdTimer = setInterval(()=>{ const p = getPos(); closeTicket(p[0], p[1]); }, holdInterval());
+}
+function stopHold(){
+  if(holdTimer){ clearInterval(holdTimer); holdTimer = null; }
+}
+
+const ticketEl = $("ticket");
+
+ticketEl.addEventListener("pointerdown", e=>{
+  if(e.button !== 0) return;
+  const r = $("ticketWrap").getBoundingClientRect();
+  let pos = [e.clientX - r.left, e.clientY - r.top];
+  closeTicket(pos[0], pos[1]);                       // immediate feedback
+  ticketEl.addEventListener("pointermove", track);
+  startHold(()=>pos);
+  function track(ev){ pos = [ev.clientX - r.left, ev.clientY - r.top]; }
+  const end = ()=>{
+    stopHold();
+    ticketEl.removeEventListener("pointermove", track);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+  };
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+});
+
+// Space: fire once on press, then repeat while held. e.repeat is ignored
+// because our own interval drives the cadence.
+document.addEventListener("keydown", e=>{
+  if(e.code !== "Space") return;
+  const t = e.target;
+  if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  e.preventDefault();
+  if(e.repeat) return;
+  closeTicket.apply(null, ticketCentre());
+  ticketEl.classList.add("held");
+  startHold(ticketCentre);
+});
+document.addEventListener("keyup", e=>{
+  if(e.code !== "Space") return;
+  stopHold();
+  ticketEl.classList.remove("held");
+});
+// Losing focus mid-hold would otherwise leave the interval running forever.
+window.addEventListener("blur", ()=>{ stopHold(); ticketEl.classList.remove("held"); });
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+    t.classList.add("on");
+    tab = t.dataset.tab;
+    renderList(true);   // force: the signature scheme is per-tab
+  };
+});
+
+$("prestigeBtn").onclick = prestige;
+$("saveBtn").onclick = ()=>{ save(); toast("Saved."); };
+$("wipeBtn").onclick = ()=>{
+  if(!confirm("Erase everything, including reputation?")) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  S = {v:1,cash:0,lifetime:0,clicks:0,staff:{},staffTotal:0,upgrades:{},reputation:0,lastSeen:Date.now()};
+  renderHead(); renderList(); toast("Wiped.");
+};
+window.addEventListener("beforeunload", save);
+
+/* ---------- ambient datacenter floor ----------
+   One rack per two staff, up to a roomful. The floor line rises with
+   progress toward the next exit, so the room visibly fills as a run
+   matures. Drawn on canvas rather than as DOM so it costs nothing to
+   animate and never interferes with clicking. */
+const floorCv = $("floor");
+const fx = floorCv.getContext("2d");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let racks = [];
+
+function sizeFloor(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  floorCv.width  = Math.floor(innerWidth * dpr);
+  floorCv.height = Math.floor(floorCv.clientHeight * dpr);
+  fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildRacks();
+}
+
+function buildRacks(){
+  // Always show a few racks: you rent the room before you fill it, and a
+  // brand-new player was previously getting an empty canvas -- floor(0/2)
+  // is zero, so nothing was drawn at all.
+  const want = Math.min(3 + Math.floor(S.staffTotal / 2), 26);
+  const w = innerWidth;
+  racks = [];
+  for(let i = 0; i < want; i++){
+    // Deterministic per index, so racks don't jump around between rebuilds.
+    const seed = Math.sin(i * 12.9898) * 43758.5453;
+    const r = seed - Math.floor(seed);
+    racks.push({
+      x: (i / Math.max(want, 1)) * w + (r - 0.5) * 26,
+      h: 54 + r * 66,
+      w: 24 + r * 12,
+      depth: r,                      // 0 = far, 1 = near
+      leds: 3 + Math.floor(r * 4),
+      phase: r * 10
+    });
+  }
+  racks.sort((a,b)=>a.depth - b.depth);   // far racks drawn first
+}
+
+function drawFloor(t){
+  const W = innerWidth, H = floorCv.clientHeight;
+  fx.clearRect(0, 0, W, H);
+
+  // Progress toward the next exit raises the floor line.
+  const prog = Math.min(S.lifetime / PRESTIGE_MIN, 1);
+  const baseY = H - 10 - prog * (H * 0.22);
+
+  // Haze so racks fade into the page rather than sitting on a hard edge.
+  const g = fx.createLinearGradient(0, baseY - 170, 0, H);
+  g.addColorStop(0, "rgba(62,216,208,0)");
+  g.addColorStop(1, "rgba(62,216,208," + (0.12 + prog * 0.10).toFixed(3) + ")");
+  fx.fillStyle = g;
+  fx.fillRect(0, baseY - 170, W, H - baseY + 170);
+
+  // The room itself: a receding floor grid, so there is something to look
+  // at from the very first second rather than only once staff exist.
+  fx.strokeStyle = "rgba(62,216,208,0.13)";
+  fx.lineWidth = 1;
+  fx.beginPath();
+  for(let i = 0; i <= 7; i++){
+    const y = baseY + Math.pow(i / 7, 1.9) * (H - baseY);
+    fx.moveTo(0, y); fx.lineTo(W, y);
+  }
+  const vanish = W / 2;
+  for(let i = -8; i <= 8; i++){
+    fx.moveTo(vanish + i * (W / 9), H);
+    fx.lineTo(vanish + i * (W / 42), baseY);
+  }
+  fx.stroke();
+
+  fx.strokeStyle = "rgba(62,216,208,0.3)";
+  fx.beginPath(); fx.moveTo(0, baseY); fx.lineTo(W, baseY); fx.stroke();
+
+  racks.forEach((r, i) => {
+    const near = 0.45 + r.depth * 0.55;
+    const y = baseY - r.h * near;
+    fx.globalAlpha = 0.12 + r.depth * 0.3;
+    fx.fillStyle = "#1B2531";
+    fx.fillRect(r.x, y, r.w * near, r.h * near);
+    fx.globalAlpha = 0.3 + r.depth * 0.35;
+    fx.strokeStyle = "#26323F";
+    fx.lineWidth = 1;
+    fx.strokeRect(r.x + .5, y + .5, r.w * near, r.h * near);
+
+    // Activity LEDs. Static when reduced motion is requested.
+    for(let l = 0; l < r.leds; l++){
+      const ly = y + 8 + l * ((r.h * near - 12) / r.leds);
+      const blink = reduceMotion ? 0.7 : (Math.sin(t / 420 + r.phase + l * 1.7) + 1) / 2;
+      fx.globalAlpha = (0.25 + r.depth * 0.4) * (0.35 + blink * 0.65);
+      fx.fillStyle = l % 4 === 0 ? "#FBBF24" : "#3ED8D0";
+      fx.fillRect(r.x + 4, ly, 3, 2);
+    }
+  });
+  fx.globalAlpha = 1;
+}
+
+let floorRaf = null, lastRackCount = -1;
+function floorTick(t){
+  if(S.staffTotal !== lastRackCount){ lastRackCount = S.staffTotal; buildRacks(); }
+  drawFloor(t);
+  floorRaf = requestAnimationFrame(floorTick);
+}
+addEventListener("resize", sizeFloor);
+sizeFloor();
+floorRaf = requestAnimationFrame(floorTick);
+
+/* ---------- the one and only game loop ---------- */
+let last = Date.now();
+setInterval(()=>{
+  const now = Date.now();
+  // Clamp dt so a backgrounded tab that fires late cannot pay out a windfall.
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  earn(totalRate() * dt);
+  renderHead();
+  renderList();
+}, TICK_MS);
+
+setInterval(save, 20000);
+
+load();
+renderHead();
+renderList();
+</script>
 </body>
-</html> 
+</html>
