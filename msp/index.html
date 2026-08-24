@@ -196,7 +196,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
         <span class="ticket-icon">🎫</span>
         <span class="ticket-label">Close a Ticket</span>
         <span class="ticket-worth" id="clickWorth">+$1</span>
-        <span class="ticket-hint">click, or hold space</span>
+        <span class="ticket-hint" id="ticketHint">click, or press space</span>
       </button>
     </div>
 
@@ -254,9 +254,14 @@ const STAFF = [
   {id:"branch",   name:"Second Branch",    icon:"🏢", cost:330000000, rate:44000, blurb:"A whole other office."}
 ];
 
-// kind: "staff" doubles one staff line; "click" doubles click value; "global" boosts everything.
+// kind: "staff" doubles one staff line; "click" doubles click value;
+// "global" boosts everything; "hold" unlocks hold-to-work; "holdspeed"
+// makes holding faster.
 const UPGRADES = [
   {id:"macros",    name:"Ticket Macros",      icon:"⚡", cost:100,        kind:"click",  mult:2, need:()=>S.clicks>=25,           blurb:"Canned replies. Double click value."},
+  {id:"queue",     name:"Queue Runner",       icon:"⏩", cost:400,        kind:"hold",           need:()=>S.clicks>=60,           blurb:"Hold to keep pulling tickets, one a second."},
+  {id:"dispatch",  name:"Auto-Dispatcher",    icon:"🛰️", cost:15000,      kind:"holdspeed", mult:2, need:()=>!!S.upgrades.queue && S.clicks>=200, blurb:"Holding works twice as fast."},
+  {id:"swarm",     name:"Swarm Triage",       icon:"🐝", cost:400000,     kind:"holdspeed", mult:2.5, need:()=>!!S.upgrades.dispatch,             blurb:"Holding works far faster again."},
   {id:"kb",        name:"Knowledge Base",     icon:"📚", cost:500,        kind:"staff",  target:"helpdesk", mult:2, need:()=>c("helpdesk")>=5,  blurb:"Help Desk output doubled."},
   {id:"rmm",       name:"RMM Agent",          icon:"🔧", cost:2500,       kind:"staff",  target:"sysadmin", mult:2, need:()=>c("sysadmin")>=5,  blurb:"Sysadmin output doubled."},
   {id:"scripts",   name:"Automation Scripts", icon:"📜", cost:5000,       kind:"click",  mult:2, need:()=>S.clicks>=100,          blurb:"Double click value again."},
@@ -361,6 +366,12 @@ function renderHead(){
   $("cash").textContent = money(S.cash);
   $("rate").textContent = "$" + rateStr(totalRate()) + " / sec";
   $("clickWorth").textContent = "+" + money(clickValue());
+  const hint = $("ticketHint");
+  if(hint){
+    hint.textContent = canHold()
+      ? "click, or hold — " + rateStr(1000 / holdInterval()) + "/sec"
+      : "click, or press space";
+  }
   $("sTickets").textContent = fmt(S.clicks);
   $("sStaff").textContent = fmt(S.staffTotal);
   $("sLife").textContent = money(S.lifetime);
@@ -535,6 +546,12 @@ function buyUpgrade(u){
   if(S.cash < u.cost || S.upgrades[u.id]) return;
   S.cash -= u.cost;
   S.upgrades[u.id] = true;
+  // A speed change while the button is already down should apply now, not
+  // after the player lets go. The interval has to be rebuilt to re-read it.
+  if((u.kind === "hold" || u.kind === "holdspeed") && holdTimer && lastHoldPos){
+    stopHold();
+    startHold(lastHoldPos);
+  }
   toast(u.name + " acquired.");
   renderHead(); renderList();
 }
@@ -596,16 +613,29 @@ function load(){
 /* Click, or hold. Holding runs on our own interval rather than relying on
    the OS key-repeat rate, which is slow, differs per machine, and does not
    exist at all for a held mouse button. */
-const HOLD_MS = 90;
+// Holding is earned, not free: it arrives with Queue Runner and speeds up
+// with later upgrades. Base cadence is one ticket a second -- deliberately
+// slower than a person can click, so holding is the lazy option rather than
+// the optimal one.
+const HOLD_BASE_MS = 1000;
 let holdTimer = null;
+
+const canHold = () => !!S.upgrades.queue;
+function holdInterval(){
+  let ms = HOLD_BASE_MS;
+  UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "holdspeed") ms /= u.mult; });
+  return Math.max(60, ms);
+}
 
 function ticketCentre(){
   const r = $("ticket").getBoundingClientRect(), w = $("ticketWrap").getBoundingClientRect();
   return [r.left - w.left + r.width/2, r.top - w.top + r.height/2];
 }
+let lastHoldPos = null;
 function startHold(getPos){
-  if(holdTimer) return;
-  holdTimer = setInterval(()=>{ const p = getPos(); closeTicket(p[0], p[1]); }, HOLD_MS);
+  if(holdTimer || !canHold()) return;
+  lastHoldPos = getPos;
+  holdTimer = setInterval(()=>{ const p = getPos(); closeTicket(p[0], p[1]); }, holdInterval());
 }
 function stopHold(){
   if(holdTimer){ clearInterval(holdTimer); holdTimer = null; }
@@ -689,7 +719,10 @@ function sizeFloor(){
 }
 
 function buildRacks(){
-  const want = Math.min(Math.floor(S.staffTotal / 2), 26);
+  // Always show a few racks: you rent the room before you fill it, and a
+  // brand-new player was previously getting an empty canvas -- floor(0/2)
+  // is zero, so nothing was drawn at all.
+  const want = Math.min(3 + Math.floor(S.staffTotal / 2), 26);
   const w = innerWidth;
   racks = [];
   for(let i = 0; i < want; i++){
@@ -717,11 +750,30 @@ function drawFloor(t){
   const baseY = H - 10 - prog * (H * 0.22);
 
   // Haze so racks fade into the page rather than sitting on a hard edge.
-  const g = fx.createLinearGradient(0, baseY - 150, 0, H);
+  const g = fx.createLinearGradient(0, baseY - 170, 0, H);
   g.addColorStop(0, "rgba(62,216,208,0)");
-  g.addColorStop(1, "rgba(62,216,208," + (0.05 + prog * 0.06).toFixed(3) + ")");
+  g.addColorStop(1, "rgba(62,216,208," + (0.12 + prog * 0.10).toFixed(3) + ")");
   fx.fillStyle = g;
-  fx.fillRect(0, baseY - 150, W, H - baseY + 150);
+  fx.fillRect(0, baseY - 170, W, H - baseY + 170);
+
+  // The room itself: a receding floor grid, so there is something to look
+  // at from the very first second rather than only once staff exist.
+  fx.strokeStyle = "rgba(62,216,208,0.13)";
+  fx.lineWidth = 1;
+  fx.beginPath();
+  for(let i = 0; i <= 7; i++){
+    const y = baseY + Math.pow(i / 7, 1.9) * (H - baseY);
+    fx.moveTo(0, y); fx.lineTo(W, y);
+  }
+  const vanish = W / 2;
+  for(let i = -8; i <= 8; i++){
+    fx.moveTo(vanish + i * (W / 9), H);
+    fx.lineTo(vanish + i * (W / 42), baseY);
+  }
+  fx.stroke();
+
+  fx.strokeStyle = "rgba(62,216,208,0.3)";
+  fx.beginPath(); fx.moveTo(0, baseY); fx.lineTo(W, baseY); fx.stroke();
 
   racks.forEach((r, i) => {
     const near = 0.45 + r.depth * 0.55;
