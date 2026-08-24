@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSP Tycoon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#0B1017; --bg2:#0E141D; --panel:#141C27; --panel2:#1B2531; --line:#26323F;
+  --ink:#E6EDF5; --dim:#8A9AAC; --faint:#5A6878;
+  --accent:#3ED8D0; --accent-dark:#0E5C58; --accent-ink:#05201F;
+  --ok:#4ADE80; --warn:#FBBF24; --crit:#F87171; --cash:#7DD3A0;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --sans:"Outfit",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  min-height:100vh;overflow-x:hidden;
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(62,216,208,.07),transparent);
+}
+button{font-family:inherit;color:inherit;border:none;background:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:minmax(0,1fr) 384px;min-height:100vh}
+@media(max-width:900px){.app{grid-template-columns:1fr}}
+
+.main{display:flex;flex-direction:column;align-items:center;padding:22px 24px 40px;gap:20px}
+
+.brand{display:flex;align-items:center;gap:10px;align-self:flex-start}
+.brand-mark{
+  width:30px;height:30px;border-radius:7px;background:var(--accent);
+  color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:15px;
+}
+.brand-name{font-weight:600;font-size:17px;letter-spacing:-.01em}
+.brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+
+/* ---------- revenue ---------- */
+.readout{text-align:center;margin-top:6px}
+.cash{
+  font-family:var(--mono);font-weight:700;font-size:clamp(34px,6vw,54px);
+  color:var(--cash);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05;
+}
+.rate{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+
+/* ---------- the click target ---------- */
+.ticket-wrap{position:relative;display:grid;place-items:center;padding:6px 0 2px}
+.ticket{
+  width:min(300px,72vw);aspect-ratio:1;border-radius:26px;
+  background:linear-gradient(160deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  transition:transform .07s ease,box-shadow .2s ease,border-color .2s ease;
+  box-shadow:0 18px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);
+  position:relative;overflow:hidden;
+}
+.ticket::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 22%,rgba(62,216,208,.16),transparent 62%);
+  opacity:0;transition:opacity .2s;
+}
+.ticket:hover{border-color:var(--accent-dark);transform:translateY(-2px)}
+.ticket:hover::after{opacity:1}
+.ticket:active{transform:scale(.97) translateY(0)}
+.ticket-icon{font-size:52px;line-height:1}
+.ticket-label{font-weight:600;font-size:19px;letter-spacing:-.01em}
+.ticket-hint{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.ticket-worth{font-family:var(--mono);font-size:13px;color:var(--accent);font-variant-numeric:tabular-nums}
+
+/* floating +$ */
+.float{
+  position:absolute;font-family:var(--mono);font-weight:700;font-size:17px;color:var(--cash);
+  pointer-events:none;animation:rise 1s ease-out forwards;text-shadow:0 2px 8px rgba(0,0,0,.6);
+}
+@keyframes rise{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-64px)}}
+@media(prefers-reduced-motion:reduce){
+  .float{animation-duration:.01ms}
+  .ticket,.ticket:hover,.ticket:active{transition:none;transform:none}
+}
+
+/* ---------- stat strip ---------- */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:9px;width:min(520px,100%)}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
+.stat-v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+
+/* ---------- prestige ---------- */
+.prestige{
+  width:min(520px,100%);background:var(--panel);border:1px solid var(--line);
+  border-left:3px solid var(--warn);border-radius:10px;padding:14px 16px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+}
+.prestige-body{flex:1;min-width:180px}
+.prestige-t{font-weight:600;font-size:14.5px}
+.prestige-d{font-size:12.5px;color:var(--dim);margin-top:2px;line-height:1.5}
+.btn{
+  background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;
+  padding:9px 16px;border-radius:8px;white-space:nowrap;transition:filter .15s;
+}
+.btn:hover:not(:disabled){filter:brightness(1.1)}
+.btn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
+.btn-warn{background:var(--warn);color:#3A2A05}
+
+/* ---------- store ---------- */
+.store{background:var(--bg2);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+@media(max-width:900px){.store{height:auto;position:static;border-left:none;border-top:1px solid var(--line)}}
+.tabs{display:flex;border-bottom:1px solid var(--line);flex-shrink:0}
+.tab{
+  flex:1;padding:13px 8px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);border-bottom:2px solid transparent;transition:color .15s;
+}
+.tab:hover{color:var(--dim)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tab .badge{
+  display:inline-block;margin-left:5px;background:var(--accent);color:var(--accent-ink);
+  border-radius:9px;padding:0 5px;font-size:9.5px;font-weight:700;
+}
+.list{overflow-y:auto;flex:1;padding:9px;display:flex;flex-direction:column;gap:7px}
+
+.item{
+  width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:11px 13px;display:grid;grid-template-columns:38px 1fr auto;
+  gap:11px;align-items:center;transition:border-color .15s,background .15s;
+}
+.item:hover:not(:disabled){border-color:var(--accent-dark);background:var(--panel2)}
+.item:disabled{opacity:.42;cursor:not-allowed}
+.item-ic{
+  width:38px;height:38px;border-radius:9px;background:var(--panel2);
+  display:grid;place-items:center;font-size:19px;
+}
+.item-n{font-weight:600;font-size:14px;letter-spacing:-.005em}
+.item-m{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:2px;font-variant-numeric:tabular-nums}
+.item-r{text-align:right}
+.item-c{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--cash);font-variant-numeric:tabular-nums}
+.item-c.cant{color:var(--crit)}
+.item-o{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
+.empty{padding:32px 18px;text-align:center;color:var(--faint);font-size:13px;line-height:1.6}
+
+.toast-wrap{position:fixed;bottom:18px;left:18px;display:flex;flex-direction:column;gap:7px;z-index:50}
+.toast{
+  background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);
+  border-radius:8px;padding:10px 15px;font-size:13px;animation:slide .3s ease-out;max-width:300px;
+}
+@keyframes slide{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
+
+.bar{display:flex;gap:7px;padding:9px;border-top:1px solid var(--line);flex-shrink:0}
+.mini{
+  flex:1;font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--faint);padding:7px;border:1px solid var(--line);border-radius:7px;transition:color .15s,border-color .15s;
+}
+.mini:hover{color:var(--accent);border-color:var(--accent-dark)}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <main class="main">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MSP Tycoon</div>
+        <div class="brand-sub">Managed Service Provider</div>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="cash" id="cash">$0</div>
+      <div class="rate" id="rate">$0.0 / sec</div>
+    </div>
+
+    <div class="ticket-wrap" id="ticketWrap">
+      <button class="ticket" id="ticket" aria-label="Close a support ticket">
+        <span class="ticket-icon">🎫</span>
+        <span class="ticket-label">Close a Ticket</span>
+        <span class="ticket-worth" id="clickWorth">+$1</span>
+        <span class="ticket-hint">click, or hold space</span>
+      </button>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-k">Tickets</div><div class="stat-v" id="sTickets">0</div></div>
+      <div class="stat"><div class="stat-k">Staff</div><div class="stat-v" id="sStaff">0</div></div>
+      <div class="stat"><div class="stat-k">Lifetime</div><div class="stat-v" id="sLife">$0</div></div>
+      <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
+    </div>
+
+    <div class="prestige">
+      <div class="prestige-body">
+        <div class="prestige-t">Sell the company</div>
+        <div class="prestige-d" id="prestigeDesc">Build $1M lifetime revenue to make an exit worthwhile.</div>
+      </div>
+      <button class="btn btn-warn" id="prestigeBtn" disabled>Sell</button>
+    </div>
+  </main>
+
+  <aside class="store">
+    <div class="tabs">
+      <button class="tab on" data-tab="staff">Staff</button>
+      <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="bar">
+      <button class="mini" id="saveBtn">Save</button>
+      <button class="mini" id="wipeBtn">Wipe</button>
+    </div>
+  </aside>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   MSP Tycoon
+
+   Deliberate architecture notes, since the previous build was undone
+   by exactly these things:
+
+   - ONE interval owns the simulation. Nothing else advances state.
+   - State never round-trips through the DOM. The DOM is written to,
+     never read from, as a source of truth.
+   - STAFF and UPGRADES are static config and are never serialised.
+     The save file carries only counts and flags, so the economy can be
+     rebalanced and new content added without breaking existing saves.
+   ============================================================ */
+
+/* ---------- static config (never saved) ---------- */
+const STAFF = [
+  {id:"helpdesk", name:"Help Desk Tech",   icon:"🎧", cost:15,        rate:0.1,   blurb:"Password resets, mostly."},
+  {id:"sysadmin", name:"Sysadmin",         icon:"🖥️", cost:100,       rate:1,     blurb:"Keeps the servers breathing."},
+  {id:"neteng",   name:"Network Engineer", icon:"🌐", cost:1100,      rate:8,     blurb:"It's always DNS."},
+  {id:"seceng",   name:"Security Analyst", icon:"🛡️", cost:12000,     rate:47,    blurb:"Catches things before they bill."},
+  {id:"cloud",    name:"Cloud Architect",  icon:"☁️", cost:130000,    rate:260,   blurb:"Migrates it, then re-migrates it."},
+  {id:"vcio",     name:"vCIO",             icon:"📊", cost:1400000,   rate:1400,  blurb:"Turns roadmaps into retainers."},
+  {id:"noc",      name:"24/7 NOC",         icon:"🌙", cost:20000000,  rate:7800,  blurb:"Someone is always awake."},
+  {id:"branch",   name:"Second Branch",    icon:"🏢", cost:330000000, rate:44000, blurb:"A whole other office."}
+];
+
+// kind: "staff" doubles one staff line; "click" doubles click value; "global" boosts everything.
+const UPGRADES = [
+  {id:"macros",    name:"Ticket Macros",      icon:"⚡", cost:100,        kind:"click",  mult:2, need:()=>S.clicks>=25,           blurb:"Canned replies. Double click value."},
+  {id:"kb",        name:"Knowledge Base",     icon:"📚", cost:500,        kind:"staff",  target:"helpdesk", mult:2, need:()=>c("helpdesk")>=5,  blurb:"Help Desk output doubled."},
+  {id:"rmm",       name:"RMM Agent",          icon:"🔧", cost:2500,       kind:"staff",  target:"sysadmin", mult:2, need:()=>c("sysadmin")>=5,  blurb:"Sysadmin output doubled."},
+  {id:"scripts",   name:"Automation Scripts", icon:"📜", cost:5000,       kind:"click",  mult:2, need:()=>S.clicks>=100,          blurb:"Double click value again."},
+  {id:"monitor",   name:"Monitoring Stack",   icon:"📡", cost:20000,      kind:"staff",  target:"neteng", mult:2, need:()=>c("neteng")>=5,      blurb:"Network Engineer output doubled."},
+  {id:"psa",       name:"PSA Platform",       icon:"🗂️", cost:75000,      kind:"global", mult:1.25, need:()=>S.staffTotal>=25,    blurb:"All staff +25%."},
+  {id:"siem",      name:"SIEM",               icon:"🔎", cost:250000,     kind:"staff",  target:"seceng", mult:2, need:()=>c("seceng")>=5,      blurb:"Security output doubled."},
+  {id:"soc2",      name:"SOC 2 Report",       icon:"📋", cost:1200000,    kind:"global", mult:1.5,  need:()=>S.staffTotal>=50,    blurb:"Enterprise clients. All staff +50%."},
+  {id:"iac",       name:"Infrastructure as Code", icon:"🧱", cost:6000000, kind:"staff", target:"cloud", mult:2, need:()=>c("cloud")>=5,      blurb:"Cloud output doubled."},
+  {id:"ai",        name:"AI Triage",          icon:"🤖", cost:40000000,   kind:"global", mult:2, need:()=>S.staffTotal>=100,      blurb:"All staff doubled."}
+];
+
+const SAVE_KEY = "mspTycoonSave";
+const TICK_MS  = 100;               // one loop, 10Hz
+const PRESTIGE_MIN = 1e6;           // lifetime revenue before an exit is allowed
+
+/* ---------- mutable state (this, and only this, is saved) ---------- */
+let S = {
+  v: 1,
+  cash: 0,
+  lifetime: 0,
+  clicks: 0,
+  staff: {},                 // id -> count
+  staffTotal: 0,
+  upgrades: {},              // id -> true
+  reputation: 0,             // permanent prestige currency
+  lastSeen: Date.now()
+};
+
+const c = id => S.staff[id] || 0;
+
+/* ---------- number formatting ---------- */
+const UNITS = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc"];
+function fmt(n){
+  if(!isFinite(n)) return "0";
+  if(n < 1000) return (n < 10 && n % 1 !== 0) ? n.toFixed(1) : Math.floor(n).toString();
+  let t = 0;
+  while(n >= 1000 && t < UNITS.length - 1){ n /= 1000; t++; }
+  return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + UNITS[t];
+}
+const money = n => "$" + fmt(n);
+
+/* ---------- derived economy (pure functions of state + config) ---------- */
+function costOf(def){
+  // Cookie Clicker's proven curve: each copy costs 15% more than the last.
+  return Math.ceil(def.cost * Math.pow(1.15, c(def.id)));
+}
+function repMult(){ return 1 + S.reputation * 0.02; }   // +2% per reputation
+
+function rateOf(def){
+  let r = def.rate * c(def.id);
+  if(!r) return 0;
+  UPGRADES.forEach(u=>{
+    if(!S.upgrades[u.id]) return;
+    if(u.kind === "staff"  && u.target === def.id) r *= u.mult;
+    if(u.kind === "global") r *= u.mult;
+  });
+  return r * repMult();
+}
+const totalRate = () => STAFF.reduce((s,d)=>s + rateOf(d), 0);
+
+function clickValue(){
+  let v = 1;
+  UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "click") v *= u.mult; });
+  // Clicking stays relevant: it scales with a slice of passive income.
+  return (v + totalRate() * 0.05) * repMult();
+}
+
+function pendingRep(){
+  if(S.lifetime < PRESTIGE_MIN) return 0;
+  return Math.floor(Math.sqrt(S.lifetime / PRESTIGE_MIN)) - S.reputation;
+}
+
+/* ---------- rendering ---------- */
+let tab = "staff";
+const $ = id => document.getElementById(id);
+
+function renderHead(){
+  $("cash").textContent = money(S.cash);
+  $("rate").textContent = "$" + fmt(totalRate()) + " / sec";
+  $("clickWorth").textContent = "+" + money(clickValue());
+  $("sTickets").textContent = fmt(S.clicks);
+  $("sStaff").textContent = fmt(S.staffTotal);
+  $("sLife").textContent = money(S.lifetime);
+  $("sRep").textContent = fmt(S.reputation);
+
+  const p = pendingRep();
+  const btn = $("prestigeBtn");
+  btn.disabled = p <= 0;
+  btn.textContent = p > 0 ? "Sell for " + fmt(p) : "Sell";
+  $("prestigeDesc").textContent = p > 0
+    ? "Exit now for " + fmt(p) + " reputation — a permanent +" + (p*2) + "% to everything. Resets cash, staff and upgrades."
+    : "Reach " + money(PRESTIGE_MIN) + " lifetime revenue to make an exit worthwhile. (" + money(S.lifetime) + " so far)";
+
+  const avail = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need() && S.cash >= u.cost).length;
+  const badge = $("upBadge");
+  badge.style.display = avail ? "inline-block" : "none";
+  badge.textContent = avail;
+}
+
+/* The store is rebuilt only when the *set* of visible rows changes.
+   Affordability changes every tick, so that is applied separately by
+   refreshAffordability() -- rebuilding this DOM ten times a second would
+   flicker and steal clicks mid-press. */
+let listSig = "";
+
+function listSignature(){
+  if(tab === "staff"){
+    return "s|" + STAFF.map((d,i)=>{
+      const shown = i === 0 || c(STAFF[i-1].id) > 0;
+      return shown ? d.id + ":" + c(d.id) : "";
+    }).join(",");
+  }
+  return "u|" + UPGRADES.filter(u=>!S.upgrades[u.id] && u.need()).map(u=>u.id).join(",");
+}
+
+function refreshAffordability(){
+  document.querySelectorAll("#list .item").forEach(el=>{
+    const kind = el.dataset.kind, id = el.dataset.id;
+    let cost;
+    if(kind === "staff"){
+      const d = STAFF.find(x=>x.id===id); if(!d) return;
+      cost = costOf(d);
+      const rateEl = el.querySelector(".js-rate");
+      if(rateEl) rateEl.textContent = c(d.id) ? "$" + fmt(rateOf(d)) + "/s · " : "";
+      const ownEl = el.querySelector(".item-o");
+      if(ownEl) ownEl.textContent = c(d.id);
+    } else {
+      const u = UPGRADES.find(x=>x.id===id); if(!u) return;
+      cost = u.cost;
+    }
+    const afford = S.cash >= cost;
+    el.disabled = !afford;
+    const costEl = el.querySelector(".item-c");
+    if(costEl){
+      costEl.textContent = money(cost);
+      costEl.classList.toggle("cant", !afford);
+    }
+  });
+}
+
+function renderList(force){
+  const sig = listSignature();
+  if(!force && sig === listSig){ refreshAffordability(); return; }
+  listSig = sig;
+
+  const list = $("list");
+  list.innerHTML = "";
+
+  if(tab === "staff"){
+    STAFF.forEach((d,i)=>{
+      // Reveal one tier ahead so there is always a visible next goal.
+      const prevOwned = i === 0 || c(STAFF[i-1].id) > 0;
+      if(!prevOwned) return;
+      const cost = costOf(d), afford = S.cash >= cost;
+      const b = document.createElement("button");
+      b.className = "item";
+      b.dataset.kind = "staff";
+      b.dataset.id = d.id;
+      b.disabled = !afford;
+      b.innerHTML =
+        '<div class="item-ic">' + d.icon + '</div>' +
+        '<div><div class="item-n">' + d.name + '</div>' +
+        '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + fmt(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
+        '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
+        '<div class="item-o">' + c(d.id) + '</div></div>';
+      b.onclick = () => buyStaff(d);
+      list.appendChild(b);
+    });
+  } else {
+    const show = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need());
+    if(!show.length){
+      list.innerHTML = '<div class="empty">No upgrades available yet.<br>Hire more staff and close more tickets.</div>';
+      return;
+    }
+    show.forEach(u=>{
+      const afford = S.cash >= u.cost;
+      const b = document.createElement("button");
+      b.className = "item";
+      b.dataset.kind = "upgrade";
+      b.dataset.id = u.id;
+      b.disabled = !afford;
+      b.innerHTML =
+        '<div class="item-ic">' + u.icon + '</div>' +
+        '<div><div class="item-n">' + u.name + '</div><div class="item-m">' + u.blurb + '</div></div>' +
+        '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(u.cost) + '</div></div>';
+      b.onclick = () => buyUpgrade(u);
+      list.appendChild(b);
+    });
+  }
+}
+
+function toast(msg){
+  const t = document.createElement("div");
+  t.className = "toast";
+  t.textContent = msg;
+  $("toasts").appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+
+/* ---------- actions ---------- */
+function earn(n){ S.cash += n; S.lifetime += n; }
+
+function closeTicket(x, y){
+  const v = clickValue();
+  earn(v);
+  S.clicks++;
+  if(x !== undefined){
+    const f = document.createElement("div");
+    f.className = "float";
+    f.textContent = "+" + money(v);
+    f.style.left = x + "px";
+    f.style.top  = y + "px";
+    $("ticketWrap").appendChild(f);
+    setTimeout(()=>f.remove(), 1000);
+  }
+  renderHead();
+}
+
+function buyStaff(d){
+  const cost = costOf(d);
+  if(S.cash < cost) return;
+  S.cash -= cost;
+  S.staff[d.id] = c(d.id) + 1;
+  S.staffTotal++;
+  if(S.staff[d.id] === 1) toast("Hired your first " + d.name + ".");
+  renderHead(); renderList();
+}
+
+function buyUpgrade(u){
+  if(S.cash < u.cost || S.upgrades[u.id]) return;
+  S.cash -= u.cost;
+  S.upgrades[u.id] = true;
+  toast(u.name + " acquired.");
+  renderHead(); renderList();
+}
+
+function prestige(){
+  const p = pendingRep();
+  if(p <= 0) return;
+  if(!confirm("Sell the company for " + fmt(p) + " reputation?\n\nCash, staff and upgrades reset. Reputation is permanent.")) return;
+  S.reputation += p;
+  S.cash = 0; S.staff = {}; S.staffTotal = 0; S.upgrades = {};
+  // lifetime deliberately persists: it is the record of everything ever built.
+  toast("Acquired. +" + fmt(p) + " reputation.");
+  renderHead(); renderList(); save();
+}
+
+/* ---------- persistence (mutable state only) ---------- */
+function save(){
+  S.lastSeen = Date.now();
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }
+  catch(e){ console.error("save failed", e); }
+}
+
+function load(){
+  let raw;
+  try{ raw = localStorage.getItem(SAVE_KEY); }catch(e){ return; }
+  if(!raw) return;
+  let d;
+  try{ d = JSON.parse(raw); }catch(e){ console.error("corrupt save, ignoring"); return; }
+  if(!d || typeof d !== "object") return;
+
+  // Merge field by field. Never assign the object wholesale -- that is how a
+  // save from an older version silently deletes fields added since.
+  S.cash       = +d.cash       || 0;
+  S.lifetime   = +d.lifetime   || 0;
+  S.clicks     = +d.clicks     || 0;
+  S.reputation = +d.reputation || 0;
+  S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
+  S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
+  S.lastSeen   = +d.lastSeen || Date.now();
+
+  // Drop ids that no longer exist, so removing content cannot corrupt a save.
+  Object.keys(S.staff).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.staff[k]; });
+  Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
+
+  S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
+
+  // Offline earnings, capped at 8h so leaving it a month isn't a free win.
+  const away = Math.min((Date.now() - S.lastSeen) / 1000, 8*3600);
+  if(away > 60){
+    const gained = totalRate() * away;
+    if(gained > 0){
+      earn(gained);
+      setTimeout(()=>toast("While you were out: " + money(gained)), 500);
+    }
+  }
+}
+
+/* ---------- wiring ---------- */
+$("ticket").addEventListener("click", e=>{
+  const r = $("ticketWrap").getBoundingClientRect();
+  closeTicket(e.clientX - r.left, e.clientY - r.top);
+});
+
+// Space bar as an alternative to clicking; ignore auto-repeat.
+document.addEventListener("keydown", e=>{
+  if(e.code === "Space" && !e.repeat && e.target === document.body){
+    e.preventDefault();
+    const r = $("ticket").getBoundingClientRect(), w = $("ticketWrap").getBoundingClientRect();
+    closeTicket(r.left - w.left + r.width/2, r.top - w.top + r.height/2);
+  }
+});
+
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+    t.classList.add("on");
+    tab = t.dataset.tab;
+    renderList(true);   // force: the signature scheme is per-tab
+  };
+});
+
+$("prestigeBtn").onclick = prestige;
+$("saveBtn").onclick = ()=>{ save(); toast("Saved."); };
+$("wipeBtn").onclick = ()=>{
+  if(!confirm("Erase everything, including reputation?")) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  S = {v:1,cash:0,lifetime:0,clicks:0,staff:{},staffTotal:0,upgrades:{},reputation:0,lastSeen:Date.now()};
+  renderHead(); renderList(); toast("Wiped.");
+};
+window.addEventListener("beforeunload", save);
+
+/* ---------- the one and only game loop ---------- */
+let last = Date.now();
+setInterval(()=>{
+  const now = Date.now();
+  // Clamp dt so a backgrounded tab that fires late cannot pay out a windfall.
+  const dt = Math.min((now - last) / 1000, 1);
+  last = now;
+  earn(totalRate() * dt);
+  renderHead();
+  renderList();
+}, TICK_MS);
+
+setInterval(save, 20000);
+
+load();
+renderHead();
+renderList();
+</script>
+</body>
+</html>
