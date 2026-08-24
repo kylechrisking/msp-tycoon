@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MSP Tycoon</title>
+<!-- Unlisted while the game is in development: it is deployed so it can be
+     tested on a real URL, not so it can be found. Remove when it ships. -->
+<meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700&display=swap">
@@ -242,6 +245,20 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
 <script>
 "use strict";
+
+/* A script-killing error used to look like a game that merely felt
+   broken: no floor, no income, staff appearing only after a tab switch.
+   Nothing announced itself, so the cause had to be hunted. Surface it
+   instead -- if the page throws, say so on the page. */
+addEventListener("error", e => {
+  const box = document.createElement("div");
+  box.setAttribute("style",
+    "position:fixed;left:0;right:0;bottom:0;z-index:999;padding:10px 14px;" +
+    "background:#7F1D1D;color:#FEE2E2;font:12px/1.5 ui-monospace,monospace");
+  box.textContent = "Something broke: " + (e.message || e.error) +
+    " -- the game has stopped. Please report this.";
+  (document.body || document.documentElement).appendChild(box);
+});
 
 /* ============================================================
    MSP Tycoon
@@ -743,7 +760,12 @@ document.querySelectorAll(".tab").forEach(t=>{
   };
 });
 
-$("prestigeBtn").onclick = prestige;
+// No prestige button is wired here on purpose. It only exists while the
+// Prestige tab is open, so renderList() creates it and binds it there.
+// Binding it at startup threw on null and killed every line below this
+// one -- the floor, the game loop, and the first renderList() -- which
+// is why staff only appeared after a tab switch: those handlers are
+// bound above, so they survived.
 $("saveBtn").onclick = ()=>{ save(); toast("Saved."); };
 $("wipeBtn").onclick = ()=>{
   if(!confirm("Erase everything, including reputation?")) return;
