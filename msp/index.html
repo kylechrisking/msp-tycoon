@@ -145,6 +145,10 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 }
 .item:hover:not(:disabled){border-color:var(--accent-dark);background:var(--panel2)}
 .item:disabled{opacity:.42;cursor:not-allowed}
+/* Locked tiers read as "not yet" rather than "broken": dimmer still,
+   dashed edge, and no hover affordance. */
+.item.locked{opacity:.3;border-style:dashed}
+.item.locked .item-ic{background:transparent;font-size:15px}
 .item-ic{
   width:38px;height:38px;border-radius:9px;background:var(--panel2);
   display:grid;place-items:center;font-size:19px;
@@ -350,7 +354,9 @@ function clickValue(){
   let v = 1;
   UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "click") v *= u.mult; });
   // Clicking stays relevant: it scales with a slice of passive income.
-  return (v + totalRate() * 0.05) * repMult();
+  // Floored to whole cents so a "double click value" upgrade reads as
+  // exactly double ($2.00) instead of $2.005 rounding up to $2.01.
+  return Math.floor((v + totalRate() * 0.05) * repMult() * 100) / 100;
 }
 
 function pendingRep(){
@@ -395,9 +401,11 @@ let listSig = "";
 
 function listSignature(){
   if(tab === "staff"){
+    // Includes lock state, so unlocking a tier rebuilds the row rather
+    // than leaving a stale padlock in place.
     return "s|" + STAFF.map((d,i)=>{
-      const shown = i === 0 || c(STAFF[i-1].id) > 0;
-      return shown ? d.id + ":" + c(d.id) : "";
+      const unlocked = i === 0 || c(STAFF[i-1].id) > 0;
+      return d.id + ":" + c(d.id) + ":" + (unlocked ? 1 : 0);
     }).join(",");
   }
   if(tab === "prestige"){
@@ -422,12 +430,15 @@ function refreshAffordability(){
       const u = UPGRADES.find(x=>x.id===id); if(!u) return;
       cost = u.cost;
     }
+    // A locked row must stay disabled however much cash is on hand;
+    // affordability alone is not permission to buy.
+    const locked = el.classList.contains("locked");
     const afford = S.cash >= cost;
-    el.disabled = !afford;
+    el.disabled = locked || !afford;
     const costEl = el.querySelector(".item-c");
     if(costEl){
       costEl.textContent = money(cost);
-      costEl.classList.toggle("cant", !afford);
+      costEl.classList.toggle("cant", locked || !afford);
     }
   });
 }
@@ -441,23 +452,34 @@ function renderList(force){
   list.innerHTML = "";
 
   if(tab === "staff"){
+    // Every tier is listed. Ones you have not unlocked yet are shown
+    // locked, with the reason -- hiding them entirely meant a player
+    // holding $122 could see no way to spend it and no hint why.
     STAFF.forEach((d,i)=>{
-      // Reveal one tier ahead so there is always a visible next goal.
-      const prevOwned = i === 0 || c(STAFF[i-1].id) > 0;
-      if(!prevOwned) return;
-      const cost = costOf(d), afford = S.cash >= cost;
+      const unlocked = i === 0 || c(STAFF[i-1].id) > 0;
+      const cost = costOf(d);
+      const afford = S.cash >= cost;
       const b = document.createElement("button");
-      b.className = "item";
+      b.className = "item" + (unlocked ? "" : " locked");
       b.dataset.kind = "staff";
       b.dataset.id = d.id;
-      b.disabled = !afford;
-      b.innerHTML =
-        '<div class="item-ic">' + d.icon + '</div>' +
-        '<div><div class="item-n">' + d.name + '</div>' +
-        '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
-        '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
-        '<div class="item-o">' + c(d.id) + '</div></div>';
-      b.onclick = () => buyStaff(d);
+      b.disabled = !unlocked || !afford;
+
+      if(unlocked){
+        b.innerHTML =
+          '<div class="item-ic">' + d.icon + '</div>' +
+          '<div><div class="item-n">' + d.name + '</div>' +
+          '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
+          '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
+          '<div class="item-o">' + c(d.id) + '</div></div>';
+        b.onclick = () => buyStaff(d);
+      } else {
+        b.innerHTML =
+          '<div class="item-ic">🔒</div>' +
+          '<div><div class="item-n">' + d.name + '</div>' +
+          '<div class="item-m">Hire a ' + STAFF[i-1].name + ' to unlock</div></div>' +
+          '<div class="item-r"><div class="item-c cant">' + money(cost) + '</div></div>';
+      }
       list.appendChild(b);
     });
   } else if(tab === "prestige"){
