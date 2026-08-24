@@ -1197,12 +1197,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     setupHiringBar();
+    // Refresh the hiring bar only. Passive income belongs to
+    // Game.startGameLoop(), which owns this.data.
+    //
+    // This interval used to add passive income as well, and it corrupted the
+    // counter every tick. It sits in a top-level arrow function, so `this` is
+    // window rather than the Game instance: this.totalPassiveProd read as
+    // undefined, `data += undefined` produced NaN, and Math.floor(NaN) was
+    // written straight into #data five times a second. It also round-tripped
+    // the score through the DOM -- parsing the display text back into a
+    // number -- while startGameLoop was writing the real value to the same
+    // element, so the two fought over every frame.
     setInterval(() => {
         updateHiringBar();
-        // Passive income
-        let data = parseInt(document.getElementById('data').textContent) || 0;
-        data += this.totalPassiveProd / 5; // 5 times per second
-        document.getElementById('data').textContent = Math.floor(data);
     }, 200);
     updateHiringBar();
 }); 
