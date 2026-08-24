@@ -22,6 +22,13 @@ body{
   min-height:100vh;overflow-x:hidden;
   background-image:radial-gradient(ellipse 80% 50% at 50% -10%,rgba(62,216,208,.07),transparent);
 }
+/* Ambient datacenter floor. Cookie Clicker rises milk as you progress;
+   here the room fills with racks as you hire, and the floor level climbs
+   toward an exit. Purely decorative, so it is aria-hidden and sits behind
+   everything. */
+#floor{position:fixed;left:0;right:0;bottom:0;width:100%;height:38vh;z-index:0;pointer-events:none}
+.app{position:relative;z-index:1}
+
 button{font-family:inherit;color:inherit;border:none;background:none;cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -88,15 +95,25 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .stat-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
 .stat-v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
 
-/* ---------- prestige ---------- */
-.prestige{
-  width:min(520px,100%);background:var(--panel);border:1px solid var(--line);
-  border-left:3px solid var(--warn);border-radius:10px;padding:14px 16px;
-  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+/* ---------- prestige (lives in the store as the Exit tab) ---------- */
+.prestige-card{
+  background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
+  border-radius:10px;padding:16px 17px;display:flex;flex-direction:column;gap:12px;
 }
-.prestige-body{flex:1;min-width:180px}
-.prestige-t{font-weight:600;font-size:14.5px}
-.prestige-d{font-size:12.5px;color:var(--dim);margin-top:2px;line-height:1.5}
+.pc-h{font-weight:600;font-size:16px}
+.pc-b{font-size:12.5px;color:var(--dim);line-height:1.55}
+.pc-rows{display:flex;flex-direction:column;gap:1px;background:var(--line);border-radius:8px;overflow:hidden}
+.pc-row{
+  display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+  background:var(--bg2);padding:9px 12px;font-size:12.5px;color:var(--dim);
+}
+.pc-row b{font-family:var(--mono);color:var(--ink);font-variant-numeric:tabular-nums}
+.pc-row b.pc-good{color:var(--warn)}
+.pc-go{width:100%;text-align:center}
+.pc-lock{
+  font-family:var(--mono);font-size:11.5px;color:var(--faint);
+  text-align:center;line-height:1.7;padding:9px;border:1px dashed var(--line);border-radius:8px;
+}
 .btn{
   background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;
   padding:9px 16px;border-radius:8px;white-space:nowrap;transition:filter .15s;
@@ -157,6 +174,8 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 </head>
 <body>
 
+<canvas id="floor" aria-hidden="true"></canvas>
+
 <div class="app">
   <main class="main">
     <div class="brand">
@@ -188,19 +207,13 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
     </div>
 
-    <div class="prestige">
-      <div class="prestige-body">
-        <div class="prestige-t">Sell the company</div>
-        <div class="prestige-d" id="prestigeDesc">Build $1M lifetime revenue to make an exit worthwhile.</div>
-      </div>
-      <button class="btn btn-warn" id="prestigeBtn" disabled>Sell</button>
-    </div>
   </main>
 
   <aside class="store">
     <div class="tabs">
       <button class="tab on" data-tab="staff">Staff</button>
       <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
+      <button class="tab" data-tab="prestige">Exit <span class="badge" id="prBadge" style="display:none">!</span></button>
     </div>
     <div class="list" id="list"></div>
     <div class="bar">
@@ -276,14 +289,38 @@ const c = id => S.staff[id] || 0;
 
 /* ---------- number formatting ---------- */
 const UNITS = ["","K","M","B","T","Qa","Qi","Sx","Sp","Oc","No","Dc"];
-function fmt(n){
-  if(!isFinite(n)) return "0";
-  if(n < 1000) return (n < 10 && n % 1 !== 0) ? n.toFixed(1) : Math.floor(n).toString();
+
+function scale(n){
   let t = 0;
   while(n >= 1000 && t < UNITS.length - 1){ n /= 1000; t++; }
+  const dp = n < 10 ? 2 : n < 100 ? 1 : 0;
+  // toFixed can round 999.99 up to "1000"; step the unit so the display
+  // never reads "1000K" where "1.00M" is meant.
+  if(+n.toFixed(dp) >= 1000 && t < UNITS.length - 1){ n /= 1000; t++; }
   return n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) + UNITS[t];
 }
-const money = n => "$" + fmt(n);
+
+// Counts (staff, tickets, reputation) are whole things and never fractional.
+function fmt(n){
+  if(!isFinite(n)) return "0";
+  return n < 1000 ? Math.floor(n).toString() : scale(n);
+}
+
+// Money keeps cents until $1,000 so early clicks visibly move the number,
+// then abbreviates once the digits stop being meaningful.
+function money(n){
+  if(!isFinite(n)) return "$0.00";
+  if(n < 1000){
+    return (+n.toFixed(2) >= 1000) ? "$" + scale(n) : "$" + n.toFixed(2);
+  }
+  return "$" + scale(n);
+}
+
+// Rates read better with one decimal in the low range.
+function rateStr(n){
+  if(!isFinite(n)) return "0";
+  return n < 100 ? (Math.round(n * 10) / 10).toString() : scale(n);
+}
 
 /* ---------- derived economy (pure functions of state + config) ---------- */
 function costOf(def){
@@ -322,20 +359,16 @@ const $ = id => document.getElementById(id);
 
 function renderHead(){
   $("cash").textContent = money(S.cash);
-  $("rate").textContent = "$" + fmt(totalRate()) + " / sec";
+  $("rate").textContent = "$" + rateStr(totalRate()) + " / sec";
   $("clickWorth").textContent = "+" + money(clickValue());
   $("sTickets").textContent = fmt(S.clicks);
   $("sStaff").textContent = fmt(S.staffTotal);
   $("sLife").textContent = money(S.lifetime);
   $("sRep").textContent = fmt(S.reputation);
 
-  const p = pendingRep();
-  const btn = $("prestigeBtn");
-  btn.disabled = p <= 0;
-  btn.textContent = p > 0 ? "Sell for " + fmt(p) : "Sell";
-  $("prestigeDesc").textContent = p > 0
-    ? "Exit now for " + fmt(p) + " reputation — a permanent +" + (p*2) + "% to everything. Resets cash, staff and upgrades."
-    : "Reach " + money(PRESTIGE_MIN) + " lifetime revenue to make an exit worthwhile. (" + money(S.lifetime) + " so far)";
+  // The Exit tab flags itself when an exit is actually available.
+  const prBadge = $("prBadge");
+  prBadge.style.display = pendingRep() > 0 ? "inline-block" : "none";
 
   const avail = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need() && S.cash >= u.cost).length;
   const badge = $("upBadge");
@@ -356,6 +389,10 @@ function listSignature(){
       return shown ? d.id + ":" + c(d.id) : "";
     }).join(",");
   }
+  if(tab === "prestige"){
+    // Rebuild as the headline numbers move, but not every tick.
+    return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000);
+  }
   return "u|" + UPGRADES.filter(u=>!S.upgrades[u.id] && u.need()).map(u=>u.id).join(",");
 }
 
@@ -367,7 +404,7 @@ function refreshAffordability(){
       const d = STAFF.find(x=>x.id===id); if(!d) return;
       cost = costOf(d);
       const rateEl = el.querySelector(".js-rate");
-      if(rateEl) rateEl.textContent = c(d.id) ? "$" + fmt(rateOf(d)) + "/s · " : "";
+      if(rateEl) rateEl.textContent = c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "";
       const ownEl = el.querySelector(".item-o");
       if(ownEl) ownEl.textContent = c(d.id);
     } else {
@@ -406,12 +443,34 @@ function renderList(force){
       b.innerHTML =
         '<div class="item-ic">' + d.icon + '</div>' +
         '<div><div class="item-n">' + d.name + '</div>' +
-        '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + fmt(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
+        '<div class="item-m"><span class="js-rate">' + (c(d.id) ? "$" + rateStr(rateOf(d)) + "/s · " : "") + '</span>' + d.blurb + '</div></div>' +
         '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cost) + '</div>' +
         '<div class="item-o">' + c(d.id) + '</div></div>';
       b.onclick = () => buyStaff(d);
       list.appendChild(b);
     });
+  } else if(tab === "prestige"){
+    const p = pendingRep();
+    const box = document.createElement("div");
+    box.className = "prestige-card";
+    box.innerHTML =
+      '<div class="pc-h">Sell the company</div>' +
+      '<div class="pc-b">Walk away, bank the reputation, and start the next one with everything you learned. ' +
+      'Cash, staff and upgrades reset. Reputation is permanent and applies to every future run.</div>' +
+      '<div class="pc-rows">' +
+        '<div class="pc-row"><span>Reputation held</span><b>' + fmt(S.reputation) + '</b></div>' +
+        '<div class="pc-row"><span>Current bonus</span><b>+' + (S.reputation*2) + '%</b></div>' +
+        '<div class="pc-row"><span>Lifetime revenue</span><b>' + money(S.lifetime) + '</b></div>' +
+        '<div class="pc-row"><span>Exit is worth</span><b class="' + (p>0?"pc-good":"") + '">' + fmt(p) + ' rep</b></div>' +
+      '</div>' +
+      (p > 0
+        ? '<button class="btn btn-warn pc-go" id="prestigeBtn">Sell for ' + fmt(p) + ' reputation</button>'
+        : '<div class="pc-lock">Reach ' + money(PRESTIGE_MIN) + ' lifetime revenue to make an exit worthwhile.<br>' +
+          money(Math.max(0, PRESTIGE_MIN - S.lifetime)) + ' to go.</div>');
+    list.appendChild(box);
+    const go = $("prestigeBtn");
+    if(go) go.onclick = prestige;
+    return;
   } else {
     const show = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need());
     if(!show.length){
@@ -534,19 +593,63 @@ function load(){
 }
 
 /* ---------- wiring ---------- */
-$("ticket").addEventListener("click", e=>{
+/* Click, or hold. Holding runs on our own interval rather than relying on
+   the OS key-repeat rate, which is slow, differs per machine, and does not
+   exist at all for a held mouse button. */
+const HOLD_MS = 90;
+let holdTimer = null;
+
+function ticketCentre(){
+  const r = $("ticket").getBoundingClientRect(), w = $("ticketWrap").getBoundingClientRect();
+  return [r.left - w.left + r.width/2, r.top - w.top + r.height/2];
+}
+function startHold(getPos){
+  if(holdTimer) return;
+  holdTimer = setInterval(()=>{ const p = getPos(); closeTicket(p[0], p[1]); }, HOLD_MS);
+}
+function stopHold(){
+  if(holdTimer){ clearInterval(holdTimer); holdTimer = null; }
+}
+
+const ticketEl = $("ticket");
+
+ticketEl.addEventListener("pointerdown", e=>{
+  if(e.button !== 0) return;
   const r = $("ticketWrap").getBoundingClientRect();
-  closeTicket(e.clientX - r.left, e.clientY - r.top);
+  let pos = [e.clientX - r.left, e.clientY - r.top];
+  closeTicket(pos[0], pos[1]);                       // immediate feedback
+  ticketEl.addEventListener("pointermove", track);
+  startHold(()=>pos);
+  function track(ev){ pos = [ev.clientX - r.left, ev.clientY - r.top]; }
+  const end = ()=>{
+    stopHold();
+    ticketEl.removeEventListener("pointermove", track);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+  };
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
 });
 
-// Space bar as an alternative to clicking; ignore auto-repeat.
+// Space: fire once on press, then repeat while held. e.repeat is ignored
+// because our own interval drives the cadence.
 document.addEventListener("keydown", e=>{
-  if(e.code === "Space" && !e.repeat && e.target === document.body){
-    e.preventDefault();
-    const r = $("ticket").getBoundingClientRect(), w = $("ticketWrap").getBoundingClientRect();
-    closeTicket(r.left - w.left + r.width/2, r.top - w.top + r.height/2);
-  }
+  if(e.code !== "Space") return;
+  const t = e.target;
+  if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  e.preventDefault();
+  if(e.repeat) return;
+  closeTicket.apply(null, ticketCentre());
+  ticketEl.classList.add("held");
+  startHold(ticketCentre);
 });
+document.addEventListener("keyup", e=>{
+  if(e.code !== "Space") return;
+  stopHold();
+  ticketEl.classList.remove("held");
+});
+// Losing focus mid-hold would otherwise leave the interval running forever.
+window.addEventListener("blur", ()=>{ stopHold(); ticketEl.classList.remove("held"); });
 
 document.querySelectorAll(".tab").forEach(t=>{
   t.onclick = ()=>{
@@ -566,6 +669,92 @@ $("wipeBtn").onclick = ()=>{
   renderHead(); renderList(); toast("Wiped.");
 };
 window.addEventListener("beforeunload", save);
+
+/* ---------- ambient datacenter floor ----------
+   One rack per two staff, up to a roomful. The floor line rises with
+   progress toward the next exit, so the room visibly fills as a run
+   matures. Drawn on canvas rather than as DOM so it costs nothing to
+   animate and never interferes with clicking. */
+const floorCv = $("floor");
+const fx = floorCv.getContext("2d");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+let racks = [];
+
+function sizeFloor(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  floorCv.width  = Math.floor(innerWidth * dpr);
+  floorCv.height = Math.floor(floorCv.clientHeight * dpr);
+  fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildRacks();
+}
+
+function buildRacks(){
+  const want = Math.min(Math.floor(S.staffTotal / 2), 26);
+  const w = innerWidth;
+  racks = [];
+  for(let i = 0; i < want; i++){
+    // Deterministic per index, so racks don't jump around between rebuilds.
+    const seed = Math.sin(i * 12.9898) * 43758.5453;
+    const r = seed - Math.floor(seed);
+    racks.push({
+      x: (i / Math.max(want, 1)) * w + (r - 0.5) * 26,
+      h: 54 + r * 66,
+      w: 24 + r * 12,
+      depth: r,                      // 0 = far, 1 = near
+      leds: 3 + Math.floor(r * 4),
+      phase: r * 10
+    });
+  }
+  racks.sort((a,b)=>a.depth - b.depth);   // far racks drawn first
+}
+
+function drawFloor(t){
+  const W = innerWidth, H = floorCv.clientHeight;
+  fx.clearRect(0, 0, W, H);
+
+  // Progress toward the next exit raises the floor line.
+  const prog = Math.min(S.lifetime / PRESTIGE_MIN, 1);
+  const baseY = H - 10 - prog * (H * 0.22);
+
+  // Haze so racks fade into the page rather than sitting on a hard edge.
+  const g = fx.createLinearGradient(0, baseY - 150, 0, H);
+  g.addColorStop(0, "rgba(62,216,208,0)");
+  g.addColorStop(1, "rgba(62,216,208," + (0.05 + prog * 0.06).toFixed(3) + ")");
+  fx.fillStyle = g;
+  fx.fillRect(0, baseY - 150, W, H - baseY + 150);
+
+  racks.forEach((r, i) => {
+    const near = 0.45 + r.depth * 0.55;
+    const y = baseY - r.h * near;
+    fx.globalAlpha = 0.12 + r.depth * 0.3;
+    fx.fillStyle = "#1B2531";
+    fx.fillRect(r.x, y, r.w * near, r.h * near);
+    fx.globalAlpha = 0.3 + r.depth * 0.35;
+    fx.strokeStyle = "#26323F";
+    fx.lineWidth = 1;
+    fx.strokeRect(r.x + .5, y + .5, r.w * near, r.h * near);
+
+    // Activity LEDs. Static when reduced motion is requested.
+    for(let l = 0; l < r.leds; l++){
+      const ly = y + 8 + l * ((r.h * near - 12) / r.leds);
+      const blink = reduceMotion ? 0.7 : (Math.sin(t / 420 + r.phase + l * 1.7) + 1) / 2;
+      fx.globalAlpha = (0.25 + r.depth * 0.4) * (0.35 + blink * 0.65);
+      fx.fillStyle = l % 4 === 0 ? "#FBBF24" : "#3ED8D0";
+      fx.fillRect(r.x + 4, ly, 3, 2);
+    }
+  });
+  fx.globalAlpha = 1;
+}
+
+let floorRaf = null, lastRackCount = -1;
+function floorTick(t){
+  if(S.staffTotal !== lastRackCount){ lastRackCount = S.staffTotal; buildRacks(); }
+  drawFloor(t);
+  floorRaf = requestAnimationFrame(floorTick);
+}
+addEventListener("resize", sizeFloor);
+sizeFloor();
+floorRaf = requestAnimationFrame(floorTick);
 
 /* ---------- the one and only game loop ---------- */
 let last = Date.now();
