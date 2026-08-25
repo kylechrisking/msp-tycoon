@@ -4,8 +4,6 @@ An idle game about running a managed service provider. Close tickets,
 hire staff, buy the tools of the trade, then sell the company and do it
 all again with a better reputation.
 
-Formerly *IT Empire Idle*.
-
 ## Play it
 
 **[rootlabs.us/games/MSPtycoon](https://rootlabs.us/games/MSPtycoon)**
@@ -22,16 +20,6 @@ index.html
 ```
 
 That is the whole game — one self-contained HTML file.
-
-## What's in here
-
-| Path | What it is |
-|---|---|
-| `index.html` | **MSP Tycoon.** The current game. |
-| `legacy/` | The previous build, kept for reference. |
-
-They are independent and use separate save keys, so running one will not
-disturb the other's progress.
 
 ## How it plays
 
@@ -101,13 +89,3 @@ Known gaps:
 - The brand mark in the sidebar is still a placeholder "M".
 - Balance and pacing across a full run haven't been tuned end to end —
   the early game has had the most attention so far.
-
-## A note on the old issue list
-
-Earlier versions of this file carried a long "Known Issues" list
-describing the previous build as fundamentally broken — tasks not
-starting, upgrades doing nothing, saves not persisting. That list was
-written mid-development and never updated, and an audit of every call
-site found it substantially inaccurate. It has been removed rather than
-left to mislead. The bugs that were real are described under Design
-rules above.
