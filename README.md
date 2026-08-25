@@ -37,6 +37,11 @@ staff; staff close tickets while you are away.
   one.
 - **Selling the company** is the prestige reset. Cash, staff and upgrades
   go; reputation is permanent and worth +2% each, forever.
+- **Fifteen achievements**, on their own tab, from closing your first
+  ticket up through five exits and 200 reputation. Each one is checked
+  against state that's already saved, so a returning player's old save
+  gets retroactively credited for whatever it already qualifies for
+  rather than making them earn it twice.
 - **Clicking wins early on, on purpose.** A click is worth roughly ten
   seconds of a single Help Desk Tech's payroll, and the UI says so
   outright rather than leaving it to be inferred — a rate readout of
@@ -83,9 +88,9 @@ Playable, being tuned. Balance numbers are provisional.
 
 Known gaps:
 
-- Content is deliberately thin — eight staff, thirteen upgrades — enough
-  to prove the loop before a client roster gets built on top.
-- No achievements yet.
+- Content is deliberately thin — eight staff, thirteen upgrades, fifteen
+  achievements — enough to prove the loop before a client roster gets
+  built on top.
 - The brand mark in the sidebar is still a placeholder "M".
 - Balance and pacing across a full run haven't been tuned end to end —
   the early game has had the most attention so far.
