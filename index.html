@@ -299,6 +299,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .item.locked{opacity:.45;border-style:dashed}
 .item.locked .item-ic{background:transparent;font-size:15px}
 
+/* Achievements are display-only rows, not purchases -- same shape as a
+   store item so the tab doesn't feel like a different app, but no hover
+   glow or affordability styling, since there's nothing to buy here. */
+.item.ach{cursor:default}
+.item.ach:hover{border-color:var(--line);background:var(--panel)}
+.item.ach.got .item-ic{background:var(--accent-dark)}
+.ach-got{color:var(--accent);font-size:16px;font-weight:700}
+
 /* Owned count, drawn as pips -- one per hire, so a glance tells you the
    shape of your team without reading digits. */
 .pips{display:flex;flex-wrap:wrap;gap:2px;margin-top:5px;align-items:center}
@@ -412,6 +420,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <button class="tab on" data-tab="staff">Staff</button>
       <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
       <button class="tab" data-tab="prestige">Exit <span class="badge" id="prBadge" style="display:none">!</span></button>
+      <button class="tab" data-tab="awards">Awards <span class="badge" id="awBadge" style="display:none">0</span></button>
     </div>
     <div class="list" id="list"></div>
     <div class="bar">
@@ -487,6 +496,43 @@ const UPGRADES = [
   {id:"ai",        name:"AI Triage",          icon:"🤖", cost:40000000,   kind:"global", mult:2, need:()=>S.staffTotal>=100,      blurb:"All staff doubled."}
 ];
 
+/* Checked, not stored: an achievement is a pure function of state that is
+   already saved (clicks, staffTotal, lifetime, upgrades, exits,
+   reputation), so nothing here needs its own save format. Unlocking one
+   just flips a flag in S.ach and stays flipped. */
+const ACHIEVEMENTS = [
+  {id:"first-ticket", name:"First Ticket",        icon:"🎫", desc:"Close your first ticket.",              check:()=>S.clicks>=1},
+  {id:"century",      name:"Century",             icon:"💯", desc:"Close 100 tickets.",                    check:()=>S.clicks>=100},
+  {id:"ticket-machine",name:"Ticket Machine",     icon:"🎟️", desc:"Close 1,000 tickets.",                  check:()=>S.clicks>=1000},
+  {id:"first-hire",   name:"You're Not Alone",    icon:"🎧", desc:"Hire your first employee.",             check:()=>S.staffTotal>=1},
+  {id:"full-roster",  name:"Full Roster",         icon:"🧑‍💼", desc:"Own at least one of every staff tier.", check:()=>STAFF.every(d=>c(d.id)>0)},
+  {id:"small-army",   name:"Small Army",          icon:"👥", desc:"Reach 100 total staff.",                check:()=>S.staffTotal>=100},
+  {id:"six-figures",  name:"Six Figures",         icon:"💵", desc:"Earn $100,000 lifetime revenue.",       check:()=>S.lifetime>=1e5},
+  {id:"seven-figures",name:"Seven Figures",       icon:"💰", desc:"Earn $1,000,000 lifetime revenue.",     check:()=>S.lifetime>=1e6},
+  {id:"eight-figures",name:"Enterprise Scale",    icon:"🏢", desc:"Earn $100,000,000 lifetime revenue.",   check:()=>S.lifetime>=1e8},
+  {id:"tool-belt",    name:"Tool Belt",           icon:"🧰", desc:"Buy every upgrade.",                    check:()=>UPGRADES.every(u=>S.upgrades[u.id])},
+  {id:"automated",    name:"Automate It",         icon:"⚙️", desc:"Unlock hold-to-work.",                  check:()=>!!S.upgrades.queue},
+  {id:"first-exit",   name:"Sold",                icon:"🤝", desc:"Sell the company for the first time.",  check:()=>S.exits>=1},
+  {id:"serial",       name:"Serial Entrepreneur", icon:"🔁", desc:"Sell the company 5 times.",             check:()=>S.exits>=5},
+  {id:"reputable",    name:"Reputable",           icon:"⭐", desc:"Reach 50 reputation.",                  check:()=>S.reputation>=50},
+  {id:"legend",       name:"Industry Legend",     icon:"🏆", desc:"Reach 200 reputation.",                 check:()=>S.reputation>=200},
+];
+
+function checkAchievements(){
+  let unlocked = false;
+  ACHIEVEMENTS.forEach(a=>{
+    if(!S.ach[a.id] && a.check()){
+      S.ach[a.id] = true;
+      unlocked = true;
+      toast("Achievement: " + a.name);
+    }
+  });
+  if(unlocked){
+    renderHead();
+    if(tab === "awards") renderList(true);
+  }
+}
+
 const SAVE_KEY = "mspTycoonSave";
 const TICK_MS  = 100;               // one loop, 10Hz
 const PRESTIGE_MIN = 1e6;           // lifetime revenue before an exit is allowed
@@ -501,6 +547,8 @@ let S = {
   staffTotal: 0,
   upgrades: {},              // id -> true
   reputation: 0,             // permanent prestige currency
+  exits: 0,                  // times the company has been sold
+  ach: {},                   // id -> true, achievements unlocked
   lastSeen: Date.now(),
   tut: {}                    // tour progress: {step, done}
 };
@@ -620,6 +668,13 @@ function renderHead(){
   const badge = $("upBadge");
   badge.style.display = avail ? "inline-block" : "none";
   badge.textContent = avail;
+
+  const awBadge = $("awBadge");
+  if(awBadge){
+    const unlocked = Object.keys(S.ach).length;
+    awBadge.style.display = unlocked ? "inline-block" : "none";
+    awBadge.textContent = unlocked + "/" + ACHIEVEMENTS.length;
+  }
 }
 
 /* One pip per hire, capped so a hundred staff cannot blow out the row --
@@ -652,6 +707,9 @@ function listSignature(){
   if(tab === "prestige"){
     // Rebuild as the headline numbers move, but not every tick.
     return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000);
+  }
+  if(tab === "awards"){
+    return "a|" + Object.keys(S.ach).length;
   }
   return "u|" + UPGRADES.filter(u=>!S.upgrades[u.id] && u.need()).map(u=>u.id).join(",");
 }
@@ -758,6 +816,22 @@ function renderList(force){
     const go = $("prestigeBtn");
     if(go) go.onclick = prestige;
     return;
+  } else if(tab === "awards"){
+    // Shown unlocked or locked, never hidden -- a locked row with its
+    // condition still visible is a goal, not a spoiler, and matches how
+    // the staff tab already treats what you haven't reached yet.
+    ACHIEVEMENTS.forEach(a=>{
+      const got = !!S.ach[a.id];
+      const b = document.createElement("div");
+      b.className = "item ach" + (got ? " got" : " locked");
+      b.innerHTML =
+        '<div class="item-ic">' + (got ? a.icon : "🔒") + '</div>' +
+        '<div><div class="item-n">' + a.name + '</div>' +
+        '<div class="item-m">' + a.desc + '</div></div>' +
+        (got ? '<div class="item-r"><div class="item-c ach-got">&#10003;</div></div>' : '');
+      list.appendChild(b);
+    });
+    return;
   } else {
     const show = UPGRADES.filter(u=>!S.upgrades[u.id] && u.need());
     if(!show.length){
@@ -815,7 +889,7 @@ function buyStaff(d){
   S.staff[d.id] = c(d.id) + 1;
   S.staffTotal++;
   if(S.staff[d.id] === 1) toast("Hired your first " + d.name + ".");
-  renderHead(); renderList();
+  renderHead(); renderList(); checkAchievements();
 }
 
 function buyUpgrade(u){
@@ -829,7 +903,7 @@ function buyUpgrade(u){
     startHold(lastHoldPos);
   }
   toast(u.name + " acquired.");
-  renderHead(); renderList();
+  renderHead(); renderList(); checkAchievements();
 }
 
 function prestige(){
@@ -837,10 +911,11 @@ function prestige(){
   if(p <= 0) return;
   if(!confirm("Sell the company for " + fmt(p) + " reputation?\n\nCash, staff and upgrades reset. Reputation is permanent.")) return;
   S.reputation += p;
+  S.exits += 1;
   S.cash = 0; S.staff = {}; S.staffTotal = 0; S.upgrades = {};
   // lifetime deliberately persists: it is the record of everything ever built.
   toast("Acquired. +" + fmt(p) + " reputation.");
-  renderHead(); renderList(); save();
+  renderHead(); renderList(); checkAchievements(); save();
 }
 
 /* ---------- persistence (mutable state only) ---------- */
@@ -864,8 +939,10 @@ function load(){
   S.lifetime   = +d.lifetime   || 0;
   S.clicks     = +d.clicks     || 0;
   S.reputation = +d.reputation || 0;
+  S.exits      = +d.exits      || 0;
   S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
+  S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
   S.lastSeen   = +d.lastSeen || Date.now();
   // Absent on saves from before the tour existed. Those players have
   // already learned the game, so treat a missing record as "seen it".
@@ -874,6 +951,7 @@ function load(){
   // Drop ids that no longer exist, so removing content cannot corrupt a save.
   Object.keys(S.staff).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.staff[k]; });
   Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
+  Object.keys(S.ach).forEach(k=>{ if(!ACHIEVEMENTS.some(a=>a.id===k)) delete S.ach[k]; });
 
   S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
 
@@ -997,7 +1075,7 @@ $("wipeBtn").onclick = ()=>{
   try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
   // tut resets too: a wipe is someone starting over, and the tour is part
   // of starting.
-  S = {v:1,cash:0,lifetime:0,clicks:0,staff:{},staffTotal:0,upgrades:{},reputation:0,lastSeen:Date.now(),tut:{}};
+  S = {v:1,cash:0,lifetime:0,clicks:0,staff:{},staffTotal:0,upgrades:{},reputation:0,exits:0,ach:{},lastSeen:Date.now(),tut:{}};
   renderHead(); renderList(); coachSync(); toast("Wiped.");
 };
 window.addEventListener("beforeunload", save);
@@ -1397,6 +1475,9 @@ setInterval(()=>{
   earn(totalRate() * dt);
   renderHead();
   renderList();
+  // Catches clicks/lifetime/staff crossing a threshold passively, on top
+  // of the immediate checks after a hire, a purchase, or an exit.
+  checkAchievements();
   // Cheap: it returns immediately once the tour is done, and only touches
   // the DOM when the step actually changes.
   coachSync();
@@ -1411,6 +1492,10 @@ load();
 renderHead();
 renderList();
 coachSync();
+// A save from before achievements existed may already qualify for several
+// -- retroactively award them on load rather than making a returning
+// player re-earn what they'd already done.
+checkAchievements();
 
 // Registration failing (unsupported browser, blocked, served over plain
 // http) should never be a game-breaking error -- offline play and the
