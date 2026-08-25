@@ -37,6 +37,11 @@ staff; staff close tickets while you are away.
   one.
 - **Selling the company** is the prestige reset. Cash, staff and upgrades
   go; reputation is permanent and worth +2% each, forever.
+- **A client roster survives every exit.** Eight named clients, signed
+  once with reputation, each adding a flat, permanent $/s that staff and
+  upgrades resetting can't touch. Spending reputation on a client means
+  not banking it for the passive bonus — a real tradeoff, not a second
+  currency.
 - **Fifteen achievements**, on their own tab, from closing your first
   ticket up through five exits and 200 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
@@ -89,8 +94,9 @@ Playable, being tuned. Balance numbers are provisional.
 Known gaps:
 
 - Content is deliberately thin — eight staff, thirteen upgrades, fifteen
-  achievements — enough to prove the loop before a client roster gets
-  built on top.
+  achievements, eight clients — enough to prove each loop before more
+  gets built on top.
 - The brand mark in the sidebar is still a placeholder "M".
 - Balance and pacing across a full run haven't been tuned end to end —
-  the early game has had the most attention so far.
+  the early game has had the most attention so far, and the client
+  roster's reputation costs are a first pass, not a tuned curve.
