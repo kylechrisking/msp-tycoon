@@ -325,6 +325,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .item-r{text-align:right}
 .item-c{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--cash);font-variant-numeric:tabular-nums}
 .item-c.cant{color:var(--crit)}
+/* Locked (missing a prerequisite) is not the same problem as unaffordable
+   (missing cash), and sharing the red "cant" color between them made a
+   locked row read as an error rather than a next step. */
+.item-c.locked-price{color:var(--faint)}
+.unlock-hint{color:var(--dim)!important}
 .item-o{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
 .empty{padding:32px 18px;text-align:center;color:var(--faint);font-size:13px;line-height:1.6}
 
@@ -791,7 +796,13 @@ function refreshAffordability(){
     const costEl = el.querySelector(".item-c");
     if(costEl){
       costEl.textContent = money(cost);
-      costEl.classList.toggle("cant", locked || !afford);
+      // Locked (missing a prerequisite) and unaffordable (missing cash)
+      // are different problems with different fixes -- this ran on every
+      // tick and kept re-applying the affordability red to locked rows
+      // regardless of what the initial render set, which is exactly why
+      // a locked row read as an error instead of a next step.
+      costEl.classList.toggle("cant", !locked && !afford);
+      costEl.classList.toggle("locked-price", locked);
     }
   });
 }
@@ -833,11 +844,15 @@ function renderList(force){
           '<div class="item-o">' + c(d.id) + '</div></div>';
         b.onclick = () => buyStaff(d);
       } else {
+        // Red ("cant") means "you could buy this if you had more cash."
+        // A locked row is a different state entirely -- no amount of cash
+        // helps until the row above it is hired -- so it gets its own,
+        // non-alarming color instead of borrowing the afford-error red.
         b.innerHTML =
           '<div class="item-ic">🔒</div>' +
           '<div><div class="item-n">' + d.name + '</div>' +
-          '<div class="item-m">Hire a ' + STAFF[i-1].name + ' to unlock</div></div>' +
-          '<div class="item-r"><div class="item-c cant">' + money(cost) + '</div></div>';
+          '<div class="item-m unlock-hint">Hire a ' + STAFF[i-1].name + ' to unlock</div></div>' +
+          '<div class="item-r"><div class="item-c locked-price">' + money(cost) + '</div></div>';
       }
       list.appendChild(b);
     });
@@ -896,8 +911,8 @@ function renderList(force){
         b.innerHTML =
           '<div class="item-ic">🔒</div>' +
           '<div><div class="item-n">' + cl.name + '</div>' +
-          '<div class="item-m">Sign ' + CLIENTS[i-1].name + ' to unlock</div></div>' +
-          '<div class="item-r"><div class="item-c cant">' + fmt(cl.cost) + ' rep</div></div>';
+          '<div class="item-m unlock-hint">Sign ' + CLIENTS[i-1].name + ' to unlock</div></div>' +
+          '<div class="item-r"><div class="item-c locked-price">' + fmt(cl.cost) + ' rep</div></div>';
       }
       list.appendChild(b);
     });
