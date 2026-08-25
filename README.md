@@ -98,5 +98,7 @@ Known gaps:
   gets built on top.
 - The brand mark in the sidebar is still a placeholder "M".
 - Balance and pacing across a full run haven't been tuned end to end —
-  the early game has had the most attention so far, and the client
-  roster's reputation costs are a first pass, not a tuned curve.
+  the early game has had the most attention so far. The client roster's
+  costs were at least sanity-checked against a full-loop simulation
+  (real click/buy/exit behavior, run against the actual game functions)
+  rather than guessed, but "reachable" isn't the same as "tuned."
