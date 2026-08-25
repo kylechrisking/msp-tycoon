@@ -146,6 +146,8 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   color:var(--cash);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05;
 }
 .rate{font-family:var(--mono);font-size:13px;color:var(--dim);margin-top:4px;font-variant-numeric:tabular-nums}
+.rate-note{font-family:var(--mono);font-size:11px;color:var(--faint);margin-top:2px}
+.rate-note.lead{color:var(--accent)}
 
 /* ---------- the click target ---------- */
 .ticket-wrap{position:relative;display:grid;place-items:center;padding:6px 0 2px}
@@ -328,6 +330,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <!-- "from staff" matters: early on a click is worth ten seconds of
            your entire payroll, so an unqualified "/ sec" reads as a lie. -->
       <div class="rate"><span id="rate">$0.0</span> / sec from staff</div>
+      <!-- Staff income alone reads as the whole game, but a click is worth
+           far more early on. This says so plainly instead of leaving the
+           player to work it out from two numbers that don't obviously
+           relate. -->
+      <div class="rate-note" id="rateNote"></div>
     </div>
 
     <div class="ticket-wrap" id="ticketWrap">
@@ -522,8 +529,26 @@ const $ = id => document.getElementById(id);
 
 function renderHead(){
   $("cash").textContent = money(S.cash);
-  $("rate").textContent = "$" + rateStr(totalRate());
-  $("clickWorth").textContent = "+" + money(clickValue());
+  const tr = totalRate(), cv = clickValue();
+  $("rate").textContent = "$" + rateStr(tr);
+  $("clickWorth").textContent = "+" + money(cv);
+
+  // Tell the player outright which of the two numbers is currently doing
+  // the work, rather than leaving it to be inferred from a $0.1/s label
+  // sitting next to a $1.00 click.
+  const note = $("rateNote");
+  if(note){
+    if(tr <= 0){
+      note.textContent = "Clicking is your only income until you hire.";
+      note.classList.add("lead");
+    } else if(cv > tr){
+      note.textContent = "Each click still beats " + Math.ceil(cv / tr) + "s of payroll — keep clicking.";
+      note.classList.add("lead");
+    } else {
+      note.textContent = "Payroll has overtaken clicking.";
+      note.classList.remove("lead");
+    }
+  }
   const hint = $("ticketHint");
   if(hint){
     hint.textContent = canHold()
@@ -1160,25 +1185,25 @@ const plural = (n, one) => n + " " + one + (n === 1 ? "" : "s");
 const TOUR = [
   {
     k:"step 1", h:"Close some tickets",
-    b:()=>"Click the ticket, or press space. Every one you close is billable work, and at the start it is the only money you have coming in.<br><br><b>" +
+    b:()=>"Click the ticket, or press space. Right now clicking is the fast way to earn — a closed ticket beats what any amount of staff pays out this early.<br><br><b>" +
         plural(Math.max(0, 5 - S.clicks), "more ticket") + "</b> to go.",
     at:()=>$("ticket"), side:"right",
     done:()=>S.clicks >= 5
   },
   {
     k:"step 2", h:"Hire your first tech",
-    b:()=>"A Help Desk Tech costs " + money(costOf(STAFF[0])) + " and closes tickets on their own, forever, without you touching anything. Turning clicks into people is the whole game.<br><br><b>" +
+    b:()=>"A Help Desk Tech costs " + money(costOf(STAFF[0])) + ". They earn less per second than a click, but they earn it while you're not clicking — even with the tab closed. Keep clicking; hire when you can.<br><br><b>" +
         (S.cash >= costOf(STAFF[0]) ? "You can afford one now — hire them." : "Keep clicking: " + money(costOf(STAFF[0]) - S.cash) + " to go.") + "</b>",
     at:()=>document.querySelector('#list .item[data-kind="staff"]'), side:"left",
     show:()=>tab === "staff",
     done:()=>S.staffTotal >= 1
   },
   {
-    k:"step 3", h:"This number is the goal",
+    k:"step 3", h:"Payroll catches up eventually",
     b:()=>{
       const n = Math.max(0, 3 - S.staffTotal);
-      return "That is what your staff earn every second, whether this tab is open or not. Grow it and the game plays itself.<br><br>" +
-        "Hover any row to see what it would add before you buy. <b>Hire " +
+      return "That's what your staff earn every second on their own. Right now clicking still earns more — the note under it says by how much. Keep hiring and that flips: payroll takes over, and clicking becomes the bonus.<br><br>" +
+        "Hover any row to see what it would add. <b>Hire " +
         (n === 1 ? "1 more person" : n + " more people") + "</b> to carry on.";
     },
     at:()=>$("rate"), side:"right",
