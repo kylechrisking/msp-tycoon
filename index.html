@@ -560,34 +560,63 @@ function checkAchievements(){
 }
 
 /* Signed once, kept forever -- unlike staff and upgrades, a client
-   survives selling the company. Reputation buys them instead of cash,
-   deliberately: it's the same currency the passive +2%-per-point bonus
-   competes for, so growing this roster means choosing not to bank all
-   of it. Each one adds a flat, fixed $/s -- not a percentage, not
-   affected by upgrades -- because a signed contract is worth what it's
-   worth regardless of how efficient the payroll gets. */
+   survives selling the company. Each one adds a flat, fixed $/s -- not a
+   percentage, not affected by upgrades -- because a signed contract is
+   worth what it's worth regardless of how efficient the payroll gets.
+
+   Cash buys them and exits unlock them, which is the opposite of the
+   first design. Reputation used to be the price, on the theory that
+   spending it instead of banking it was a real tradeoff. Simulating it
+   killed that idea twice over. Reputation compounds (+2% each, forever,
+   on everything) and a contract is flat, so trading the first for the
+   second loses on any long run at any price -- signing the whole roster
+   cost 80% of lifetime revenue over 55 simulated hours, and making the
+   roster cheaper or letting contracts ride the multiplier did not save
+   it. Cash is the honest price: prestige wipes it anyway, so spending it
+   on something permanent is a genuinely good trade rather than a trap.
+
+   The rates look tiny next to late-game income and are meant to. This
+   income is never reset, so it is compared against the first minutes of
+   every future run, not the last. Simulated at 55 hours, working the
+   whole roster is worth about 1.67x the lifetime revenue of ignoring it;
+   at ten times these rates it was 7.5x and the economy ran away.
+
+   The exit gate is the pacing, and it gives selling the company
+   something to unlock besides a multiplier. */
 const CLIENTS = [
-  {id:"dental",     name:"Riverside Dental",           icon:"🦷", cost:1,   rate:5,    blurb:"Two chairs, one modem, constant panic about HIPAA."},
-  {id:"plumbing",   name:"Coastal Plumbing Co.",       icon:"🔧", cost:3,   rate:15,   blurb:"Dispatch software older than some of their trucks."},
-  {id:"law",        name:"Midtown Law Group",          icon:"⚖️", cost:7,   rate:40,   blurb:"Billable hours are sacred. Downtime is not an option."},
-  {id:"mfg",        name:"Anderson Manufacturing",     icon:"🏭", cost:15,  rate:100,  blurb:"A shop floor with more IoT than IT."},
-  {id:"care",       name:"Sunrise Assisted Living",    icon:"🏥", cost:30,  rate:250,  blurb:"Compliance paperwork nobody reads until it matters."},
-  {id:"logistics",  name:"Vantage Logistics",          icon:"🚚", cost:60,  rate:600,  blurb:"Tracks a thousand trucks. Trusts nothing to chance."},
-  {id:"credit",     name:"Prairie State Credit Union", icon:"🏦", cost:120, rate:1500, blurb:"Regulated to the letter. Audited twice a year."},
-  {id:"freight",    name:"Continental Freight Holdings", icon:"🚢", cost:250, rate:4000, blurb:"The account that pays for the second branch."},
-  {id:"health",     name:"Beacon Health Network",      icon:"🩺", cost:500,  rate:10000,  blurb:"Eleven clinics on one record system. Downtime is a patient-safety event."},
-  {id:"schools",    name:"Halverson Public Schools",   icon:"🎓", cost:1000, rate:25000,  blurb:"Twelve thousand devices and one summer to reimage them."},
-  {id:"port",       name:"Port Authority of Two Rivers", icon:"⚓", cost:2000, rate:62000, blurb:"Critical infrastructure. The audits have audits."},
-  {id:"aero",       name:"Meridian Aerospace",         icon:"✈️", cost:4000, rate:160000, blurb:"CMMC Level 2, and they will check."},
+  {id:"dental",     name:"Riverside Dental",             icon:"🦷", exits:0,  cost:54,     rate:0.03, blurb:"Two chairs, one modem, constant panic about HIPAA."},
+  {id:"plumbing",   name:"Coastal Plumbing Co.",         icon:"🔧", exits:1,  cost:144,    rate:0.08, blurb:"Dispatch software older than some of their trucks."},
+  {id:"law",        name:"Midtown Law Group",            icon:"⚖️", exits:2,  cost:360,    rate:0.2,  blurb:"Billable hours are sacred. Downtime is not an option."},
+  {id:"mfg",        name:"Anderson Manufacturing",       icon:"🏭", exits:3,  cost:900,    rate:0.5,  blurb:"A shop floor with more IoT than IT."},
+  {id:"care",       name:"Sunrise Assisted Living",      icon:"🏥", exits:4,  cost:1800,   rate:1,    blurb:"Compliance paperwork nobody reads until it matters."},
+  {id:"logistics",  name:"Vantage Logistics",            icon:"🚚", exits:6,  cost:3600,   rate:2,    blurb:"Tracks a thousand trucks. Trusts nothing to chance."},
+  {id:"credit",     name:"Prairie State Credit Union",   icon:"🏦", exits:8,  cost:8100,   rate:4.5,  blurb:"Regulated to the letter. Audited twice a year."},
+  {id:"freight",    name:"Continental Freight Holdings", icon:"🚢", exits:10, cost:15300,  rate:8.5,  blurb:"The account that pays for the second branch."},
+  {id:"health",     name:"Beacon Health Network",        icon:"🩺", exits:13, cost:27000,  rate:15,   blurb:"Eleven clinics on one record system. Downtime is a patient-safety event."},
+  {id:"schools",    name:"Halverson Public Schools",     icon:"🎓", exits:16, cost:45000,  rate:25,   blurb:"Twelve thousand devices and one summer to reimage them."},
+  {id:"port",       name:"Port Authority of Two Rivers", icon:"⚓", exits:20, cost:72000,  rate:40,   blurb:"Critical infrastructure. The audits have audits."},
+  {id:"aero",       name:"Meridian Aerospace",           icon:"✈️", exits:24, cost:108000, rate:60,   blurb:"CMMC Level 2, and they will check."},
 ];
 
 function clientBonusRate(){
   return CLIENTS.reduce((s,cl)=> s + (S.clients[cl.id] ? cl.rate : 0), 0);
 }
 
+/* What each client used to cost in reputation, kept only so a save written
+   before clients were repriced into cash can still reconstruct how much
+   reputation it had ever earned. Never read by the game itself -- and it
+   has to live here rather than being derived from CLIENTS, because
+   cl.cost is now a cash price and would inflate the total wildly. */
+const LEGACY_REP_COST = {
+  dental:1, plumbing:3, law:7, mfg:15, care:30, logistics:60,
+  credit:120, freight:250, health:500, schools:1000, port:2000, aero:4000
+};
+
+const clientUnlocked = cl => S.exits >= cl.exits;
+
 function buyClient(cl){
-  if(S.clients[cl.id] || S.reputation < cl.cost) return;
-  S.reputation -= cl.cost;
+  if(S.clients[cl.id] || !clientUnlocked(cl) || S.cash < cl.cost) return;
+  S.cash -= cl.cost;
   S.clients[cl.id] = true;
   toast("Signed " + cl.name + ".");
   renderHead(); renderList(); checkAchievements(); save();
@@ -751,8 +780,7 @@ function renderHead(){
   const clBadge = $("clBadge");
   if(clBadge){
     const clAvail = CLIENTS.filter((cl,i)=>{
-      const unlocked = i === 0 || !!S.clients[CLIENTS[i-1].id];
-      return unlocked && !S.clients[cl.id] && S.reputation >= cl.cost;
+      return clientUnlocked(cl) && !S.clients[cl.id] && S.cash >= cl.cost;
     }).length;
     clBadge.style.display = clAvail ? "inline-block" : "none";
     clBadge.textContent = clAvail;
@@ -796,7 +824,7 @@ function listSignature(){
   if(tab === "clients"){
     // Affordability moves with reputation, so this has to be sensitive
     // to more than just which clients are signed.
-    return "c|" + Object.keys(S.clients).length + "|" + S.reputation;
+    return "c|" + Object.keys(S.clients).length + "|" + S.exits + "|" + CLIENTS.filter(cl=>clientUnlocked(cl) && !S.clients[cl.id] && S.cash >= cl.cost).length;
   }
   return "u|" + UPGRADES.filter(u=>!S.upgrades[u.id] && u.need()).map(u=>u.id).join(",");
 }
@@ -919,14 +947,10 @@ function renderList(force){
     if(go) go.onclick = prestige;
     return;
   } else if(tab === "clients"){
-    if(S.exits < 1){
-      list.innerHTML = '<div class="empty">Sell the company once to start signing clients.<br>Reputation buys them; each one adds fixed income that survives every future exit.</div>';
-      return;
-    }
     CLIENTS.forEach((cl,i)=>{
       const signed = !!S.clients[cl.id];
-      const unlocked = i === 0 || !!S.clients[CLIENTS[i-1].id];
-      const afford = S.reputation >= cl.cost;
+      const unlocked = clientUnlocked(cl);
+      const afford = S.cash >= cl.cost;
       const b = document.createElement("button");
       b.className = "item" + (unlocked ? "" : " locked");
       b.dataset.kind = "client";
@@ -945,14 +969,15 @@ function renderList(force){
           '<div><div class="item-n">' + cl.name + '</div>' +
           '<div class="item-m">' + cl.blurb + '</div>' +
           '<div class="item-x">+$' + rateStr(cl.rate) + '/s, permanent</div></div>' +
-          '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + fmt(cl.cost) + ' rep</div></div>';
+          '<div class="item-r"><div class="item-c' + (afford ? "" : " cant") + '">' + money(cl.cost) + '</div></div>';
         b.onclick = () => buyClient(cl);
       } else {
+        const need = cl.exits - S.exits;
         b.innerHTML =
           '<div class="item-ic">🔒</div>' +
           '<div><div class="item-n">' + cl.name + '</div>' +
-          '<div class="item-m unlock-hint">Sign ' + CLIENTS[i-1].name + ' to unlock</div></div>' +
-          '<div class="item-r"><div class="item-c locked-price">' + fmt(cl.cost) + ' rep</div></div>';
+          '<div class="item-m unlock-hint">Sell the company ' + need + ' more time' + (need === 1 ? "" : "s") + ' to unlock</div></div>' +
+          '<div class="item-r"><div class="item-c locked-price">' + money(cl.cost) + '</div></div>';
       }
       list.appendChild(b);
     });
@@ -1105,7 +1130,7 @@ function load(){
   // reads the costs out of CLIENTS, which is static config -- the save
   // never stored them, so this stays correct even after a repricing.
   if(d.repEarned === undefined){
-    S.repEarned = S.reputation + CLIENTS.reduce((s,cl)=> s + (S.clients[cl.id] ? cl.cost : 0), 0);
+    S.repEarned = S.reputation + CLIENTS.reduce((s,cl)=> s + (S.clients[cl.id] ? (LEGACY_REP_COST[cl.id] || 0) : 0), 0);
   }
 
   S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
@@ -1433,7 +1458,8 @@ function clientTip(cl, unlocked){
   if(!unlocked){
     return '<div class="tip-n">' + cl.name + '</div>' +
       '<div class="tip-f">locked</div>' +
-      '<div class="tip-r"><span>Unlocks when</span><b>the client before it is signed</b></div>' +
+      '<div class="tip-r"><span>Unlocks at</span><b>' + cl.exits + ' exit' + (cl.exits === 1 ? "" : "s") + '</b></div>' +
+      '<div class="tip-r"><span>You have sold</span><b>' + S.exits + '</b></div>' +
       '<div class="tip-note">' + cl.blurb + '</div>';
   }
   const signed = !!S.clients[cl.id];
@@ -1442,8 +1468,9 @@ function clientTip(cl, unlocked){
     '<div class="tip-r"><span>Adds</span><b class="good">+$' + rateStr(cl.rate) + '/s</b></div>' +
     (signed
       ? '<div class="tip-r"><span>Status</span><b class="good">signed</b></div>'
-      : '<div class="tip-r"><span>Costs</span><b class="' + (S.reputation >= cl.cost ? "good" : "warn") + '">' + fmt(cl.cost) + ' reputation</b></div>') +
-    '<div class="tip-note">' + cl.blurb + (signed ? "" : " Reputation spent here is spent for good: it stops counting toward your +2%-per-point bonus, and an exit will not pay it back.") + '</div>';
+      : '<div class="tip-r"><span>Costs</span><b class="' + (S.cash >= cl.cost ? "good" : "warn") + '">' + money(cl.cost) + '</b></div>' +
+        '<div class="tip-r"><span>Pays for itself in</span><b>' + Math.ceil(cl.cost / cl.rate) + 's</b></div>') +
+    '<div class="tip-note">' + cl.blurb + (signed ? "" : " Cash is wiped when you sell the company; this contract is not.") + '</div>';
 }
 
 function placeTip(el){
