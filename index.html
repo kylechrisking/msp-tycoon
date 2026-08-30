@@ -145,6 +145,37 @@ body{
 button{font-family:inherit;color:inherit;border:none;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+/* ---------- escalated tickets ----------
+   Deliberately loud and deliberately not where the normal click target
+   is: the whole point is that it interrupts. Fixed positioning keeps it
+   clear of the store's scroll container. */
+.esc{
+  position:fixed; z-index:60; width:74px; height:74px; border:0; padding:0;
+  border-radius:14px; cursor:pointer; font-size:32px; line-height:1;
+  display:grid; place-items:center; touch-action:manipulation;
+  background:linear-gradient(160deg,#ff9d3c,#ff5252);
+  box-shadow:0 0 0 3px rgba(255,157,60,.25), 0 10px 30px rgba(255,82,82,.45);
+  animation:escIn .25s ease-out, escPulse 1.4s ease-in-out .25s infinite;
+}
+.esc:hover{ filter:brightness(1.1); }
+/* Scales up but never fades in: a renderer that freezes animations at
+   their first frame would otherwise leave the thing invisible and
+   unclickable rather than merely un-animated. */
+@keyframes escIn{ from{ transform:scale(.6) } to{ transform:scale(1) } }
+@keyframes escPulse{ 0%,100%{ transform:scale(1) } 50%{ transform:scale(1.08) } }
+/* The bar draining underneath is the only cue for how long is left. */
+.esc-bar{ position:absolute; left:8px; right:8px; bottom:7px; height:3px; border-radius:2px; background:rgba(0,0,0,.35); overflow:hidden }
+.esc-bar i{ display:block; height:100%; background:#fff; transform-origin:left center }
+@media (prefers-reduced-motion: reduce){
+  .esc{ animation:none }
+}
+
+/* Banner for whatever effect is currently running. */
+.buffs{ position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:55; display:flex; gap:6px; pointer-events:none }
+.buff{ background:rgba(255,82,82,.16); border:1px solid rgba(255,157,60,.5); color:#ffc48a;
+       font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+       padding:4px 9px; border-radius:999px; white-space:nowrap }
+
 /* ---------- shell ---------- */
 .app{display:grid;grid-template-columns:minmax(0,1fr) 384px;min-height:100vh}
 @media(max-width:900px){.app{grid-template-columns:1fr}}
@@ -530,6 +561,8 @@ const ACHIEVEMENTS = [
   {id:"per-second",   name:"A Million a Second",  icon:"⏱️", desc:"Reach $1,000,000/s in income.",         check:()=>totalRate()>=1e6},
   {id:"tool-belt",    name:"Tool Belt",           icon:"🧰", desc:"Buy every upgrade.",                    check:()=>UPGRADES.every(u=>S.upgrades[u.id])},
   {id:"automated",    name:"Automate It",         icon:"⚙️", desc:"Unlock hold-to-work.",                  check:()=>!!S.upgrades.queue},
+  {id:"caught",       name:"Caught It",           icon:"🔥", desc:"Claim an escalated ticket.",            check:()=>(S.escCaught||0)>=1},
+  {id:"responder",    name:"First Responder",     icon:"🚨", desc:"Claim 50 escalated tickets.",           check:()=>(S.escCaught||0)>=50},
   {id:"first-exit",   name:"Sold",                icon:"🤝", desc:"Sell the company for the first time.",  check:()=>S.exits>=1},
   {id:"serial",       name:"Serial Entrepreneur", icon:"🔁", desc:"Sell the company 5 times.",             check:()=>S.exits>=5},
   {id:"repeat",       name:"Repeat Offender",     icon:"♻️", desc:"Sell the company 10 times.",            check:()=>S.exits>=10},
@@ -622,6 +655,63 @@ function buyClient(cl){
   renderHead(); renderList(); checkAchievements(); save();
 }
 
+/* ---------- escalated tickets ----------
+   Cookie Clicker's golden cookie, in MSP clothing. A P1 surfaces at a
+   random spot every few minutes, sits there for a few seconds, and pays
+   out if you catch it. It is the only thing in the game that rewards
+   being at the keyboard at an unpredictable moment, which is exactly
+   what an idle game otherwise has none of.
+
+   Effects are stored as end timestamps rather than remaining seconds, so
+   a buff cannot be extended by closing the tab -- the same reason the
+   away-time payout is clamped. */
+const ESCALATIONS = [
+  {id:"allhands", name:"All Hands",       icon:"🔥", weight:42, secs:77, rateMult:7,
+   blurb:"Everyone is on the bridge. Income x7 for 77s."},
+  {id:"warroom",  name:"War Room",        icon:"⌨️", weight:16, secs:13, clickMult:777,
+   blurb:"Nobody is doing anything else. Clicks worth x777 for 13s."},
+  {id:"invoice",  name:"Emergency Invoice",icon:"💸", weight:42,
+   blurb:"Billed at emergency rates, paid immediately."}
+];
+
+const ESC_LIFETIME_MS = 13000;              // how long one sits there before it is missed
+const ESC_MIN_MS = 90000, ESC_MAX_MS = 210000;   // gap between spawns
+const escGate = () => S.clicks >= 30;       // not during the opening tutorial beats
+
+function escInterval(){ return ESC_MIN_MS + Math.random() * (ESC_MAX_MS - ESC_MIN_MS); }
+
+function pickEscalation(){
+  const total = ESCALATIONS.reduce((s,e)=>s + e.weight, 0);
+  let r = Math.random() * total;
+  for(const e of ESCALATIONS){ r -= e.weight; if(r <= 0) return e; }
+  return ESCALATIONS[0];
+}
+
+function buffActive(id){ return (S.buffs[id] || 0) > Date.now(); }
+function buffMult(field){
+  return ESCALATIONS.reduce((m,e)=> m * (e[field] && buffActive(e.id) ? e[field] : 1), 1);
+}
+
+// An instant payout is capped against income so it stays a boost rather
+// than a substitute for building anything: fifteen minutes of production,
+// or 15% of the balance, whichever is smaller.
+function invoiceValue(){
+  return Math.max(25 * clickValue(), Math.min(S.cash * 0.15, baseRate() * 900));
+}
+
+function claimEscalation(e){
+  if(e.id === "invoice"){
+    const v = invoiceValue();
+    earn(v);
+    toast("Emergency Invoice paid: " + money(v));
+  } else {
+    S.buffs[e.id] = Date.now() + e.secs * 1000;
+    toast(e.name + " for " + e.secs + "s.");
+  }
+  S.escCaught = (S.escCaught || 0) + 1;
+  renderHead(); renderList(); checkAchievements(); save();
+}
+
 const SAVE_KEY = "mspTycoonSave";
 const TICK_MS  = 100;               // one loop, 10Hz
 const PRESTIGE_MIN = 1e6;           // lifetime revenue before an exit is allowed
@@ -645,6 +735,9 @@ let S = {
   repEarned: 0,
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
+  buffs: {},                 // escalation id -> epoch ms the effect ends
+  nextEsc: 0,                // epoch ms the next escalated ticket surfaces
+  escCaught: 0,              // escalated tickets claimed, all time
   clients: {},               // id -> true, signed clients (survive prestige)
   lastSeen: Date.now(),
   tut: {}                    // tour progress: {step, done}
@@ -704,7 +797,10 @@ function rateOf(def){
   });
   return r * repMult();
 }
-const totalRate = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
+const baseRate  = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
+// What the game actually pays out: base production, times whatever
+// escalated tickets are currently running.
+const totalRate = () => baseRate() * buffMult("rateMult");
 
 function clickValue(){
   let v = 1;
@@ -712,7 +808,7 @@ function clickValue(){
   // Clicking stays relevant: it scales with a slice of passive income.
   // Floored to whole cents so a "double click value" upgrade reads as
   // exactly double ($2.00) instead of $2.005 rounding up to $2.01.
-  return Math.floor((v + totalRate() * 0.05) * repMult() * 100) / 100;
+  return Math.floor((v + totalRate() * 0.05) * repMult() * buffMult("clickMult") * 100) / 100;
 }
 
 function pendingRep(){
@@ -1111,6 +1207,14 @@ function load(){
   S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
+  // Buffs are end timestamps, so anything that expired while away is
+  // simply dropped rather than resuming with time left on it.
+  S.buffs      = {};
+  if(d.buffs && typeof d.buffs === "object"){
+    ESCALATIONS.forEach(e=>{ const t = +d.buffs[e.id]; if(t > Date.now()) S.buffs[e.id] = t; });
+  }
+  S.nextEsc    = +d.nextEsc || 0;
+  S.escCaught  = +d.escCaught || 0;
   S.clients    = (d.clients && typeof d.clients === "object") ? d.clients : {};
   S.lastSeen   = +d.lastSeen || Date.now();
   // Absent on saves from before the tour existed. Those players have
@@ -1667,6 +1771,66 @@ function placeCoach(at, side){
 
 addEventListener("resize", ()=>{ hideTip(); coachSync(); });
 
+/* ---------- escalated tickets, on screen ----------
+   The element is created and destroyed rather than hidden, so a missed
+   escalation cannot leave a stale click target behind. */
+let escEl = null, escUntil = 0, escKind = null;
+
+function spawnEscalation(){
+  if(escEl) return;
+  escKind = pickEscalation();
+  escUntil = Date.now() + ESC_LIFETIME_MS;
+
+  const b = document.createElement("button");
+  b.className = "esc";
+  b.type = "button";
+  b.setAttribute("aria-label", "Escalated ticket: " + escKind.name + ". " + escKind.blurb);
+  b.innerHTML = escKind.icon + '<span class="esc-bar"><i></i></span>';
+  // Keep it inside the viewport with room for its own size, and out of
+  // the very top strip where the buff banner sits.
+  b.style.left = Math.round(16 + Math.random() * Math.max(0, innerWidth  - 74 - 32)) + "px";
+  b.style.top  = Math.round(56 + Math.random() * Math.max(0, innerHeight - 74 - 96)) + "px";
+  b.onclick = ()=>{ claimEscalation(escKind); despawnEscalation(); };
+  document.body.appendChild(b);
+  escEl = b;
+}
+
+function despawnEscalation(){
+  if(escEl){ escEl.remove(); escEl = null; }
+  escKind = null;
+  S.nextEsc = Date.now() + escInterval();
+}
+
+function escTick(){
+  if(!escGate()) return;
+  const now = Date.now();
+  if(!S.nextEsc) S.nextEsc = now + escInterval();
+  if(escEl){
+    const left = (escUntil - now) / ESC_LIFETIME_MS;
+    if(left <= 0){ despawnEscalation(); return; }
+    const bar = escEl.querySelector(".esc-bar i");
+    if(bar) bar.style.transform = "scaleX(" + left.toFixed(3) + ")";
+  } else if(now >= S.nextEsc){
+    spawnEscalation();
+  }
+}
+
+// One pill per running effect, with the seconds left.
+const buffsEl = document.createElement("div");
+buffsEl.className = "buffs";
+document.body.appendChild(buffsEl);
+let buffSig = "";
+function renderBuffs(){
+  const now = Date.now();
+  const on = ESCALATIONS.filter(e=>(S.buffs[e.id]||0) > now);
+  const sig = on.map(e=>e.id + Math.ceil((S.buffs[e.id]-now)/1000)).join(",");
+  if(sig === buffSig) return;
+  buffSig = sig;
+  buffsEl.innerHTML = on.map(e=>
+    '<div class="buff">' + e.icon + " " + e.name + " " + Math.ceil((S.buffs[e.id]-now)/1000) + "s</div>"
+  ).join("");
+}
+
 /* ---------- the one and only game loop ---------- */
 let last = Date.now();
 setInterval(()=>{
@@ -1683,6 +1847,8 @@ setInterval(()=>{
   // Cheap: it returns immediately once the tour is done, and only touches
   // the DOM when the step actually changes.
   coachSync();
+  escTick();
+  renderBuffs();
   // The hovered row's numbers move with income, so refresh what it says.
   if(tipFor && document.contains(tipFor)) showTip(tipFor);
   else if(tipFor) hideTip();
