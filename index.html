@@ -285,6 +285,18 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .train-go:hover{ background:rgba(125,211,160,.13) }
 .lvl{ color:var(--cash); font-family:var(--mono); font-size:11px }
 
+.mkt{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(122,162,247,.08); border:1px solid rgba(122,162,247,.26);
+}
+.mkt .debt-t b{ color:#7AA2F7 }
+.mkt-go{ flex:0 0 auto; font-size:12px; padding:7px 12px; border-color:rgba(122,162,247,.4); color:#7AA2F7 }
+.mkt-go:hover{ background:rgba(122,162,247,.13) }
+.mkt-row{ display:flex; gap:6px; margin-left:auto; flex:0 0 auto }
+.mkt-row button{ font-size:11px; padding:6px 10px }
+.up{ color:var(--ok) } .down{ color:var(--crit) }
+
 .debt-go{ flex:0 0 auto; font-size:12px; padding:7px 12px; border-color:rgba(248,113,113,.45); color:var(--crit) }
 .debt-go:hover{ background:rgba(248,113,113,.14) }
 
@@ -482,6 +494,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
     </div>
 
+    <div class="mkt" id="mktStrip" style="display:none">
+      <div class="debt-t">
+        <b id="mktN">$0</b> on the contracts market
+        <span id="mktPl">unrealised 0</span>
+      </div>
+      <button class="btn mkt-go" id="mktGo" type="button">Trade</button>
+    </div>
+
     <div class="train" id="train" style="display:none">
       <div class="debt-t">
         <b id="trainN">0</b> training credits
@@ -613,6 +633,7 @@ const ACHIEVEMENTS = [
   {id:"caught",       name:"Caught It",           icon:"🔥", desc:"Claim an escalated ticket.",            check:()=>(S.escCaught||0)>=1},
   {id:"responder",    name:"First Responder",     icon:"🚨", desc:"Claim 50 escalated tickets.",           check:()=>(S.escCaught||0)>=50},
   {id:"paidoff",      name:"Paid It Down",        icon:"🧹", desc:"Pay down technical debt.",              check:()=>(S.remediated||0)>=1},
+  {id:"trader",       name:"Arbitrage",           icon:"📈", desc:"Turn a profit on the contracts market.",check:()=>(S.mktProfit||0)>0},
   {id:"trained",      name:"Certified",           icon:"📜", desc:"Spend a training credit.",              check:()=>STAFF.some(d=>levelOf(d.id)>0)},
   {id:"maxtrained",   name:"Fully Certified",     icon:"🎖️", desc:"Take a staff tier to training level 10.", check:()=>STAFF.some(d=>levelOf(d.id)>=LEVEL_MAX)},
   {id:"maxdebt",      name:"Deferred Maintenance",icon:"🕳️", desc:"Let technical debt reach its ceiling.",  check:()=>debtCount()>=DEBT_MAX},
@@ -706,6 +727,87 @@ function buyClient(cl){
   S.clients[cl.id] = true;
   toast("Signed " + cl.name + ".");
   renderHead(); renderList(); checkAchievements(); save();
+}
+
+/* ---------- the contracts market ----------
+   Cookie Clicker's stock market, unlocked by the vCIO -- the tier whose
+   whole job is turning roadmaps into retainers.
+
+   A position is stored as the cash put in and the price it went in at,
+   never as a number of units. That makes the whole thing scale-free: by
+   the late game income is orders of magnitude larger than it was when
+   the market unlocked, and any market denominated in absolute prices
+   would either be pocket change or unaffordable. Selling returns
+   invested * (price / entry), so only the ratio matters and the market
+   stays exactly as relevant at $10/s as at $10M/s.
+
+   Prices mean-revert toward 100 on a random walk, so a crashed contract
+   is a buying opportunity rather than a dead line, and nothing runs away
+   far enough to become free money. */
+const MARKET = [
+  {id:"licences", name:"Licence Blocks",  icon:"🔑", vol:2.5},
+  {id:"hardware", name:"Refurb Hardware", icon:"💻", vol:4.5},
+  {id:"bandwidth",name:"Bandwidth",       icon:"📶", vol:3.5},
+  {id:"oncall",   name:"On-Call Hours",   icon:"⏰", vol:6.5},
+  {id:"rackspace",name:"Rack Space",      icon:"🗄️", vol:1.8}
+];
+
+const MKT_MS = 10000;         // one price move every ten seconds
+const MKT_BASE = 100;
+const marketGate = () => c("vcio") >= 5;
+
+const mktPrice = id => (S.mkt.price && S.mkt.price[id]) || MKT_BASE;
+const mktInv   = id => (S.mkt.inv && S.mkt.inv[id]) || 0;
+const mktEntry = id => (S.mkt.entry && S.mkt.entry[id]) || MKT_BASE;
+// What a position is worth right now: only the ratio matters.
+const mktValue = id => mktInv(id) * (mktPrice(id) / mktEntry(id));
+
+function marketTick(){
+  if(!marketGate()) return;
+  const now = Date.now();
+  if(!S.mkt.at){ S.mkt.at = now; return; }
+  let steps = Math.floor((now - S.mkt.at) / MKT_MS);
+  if(steps <= 0) return;
+  // Cap catch-up so a save left for a week does not run thousands of
+  // steps on load; mean reversion makes the extra steps meaningless.
+  S.mkt.at += steps * MKT_MS;
+  steps = Math.min(steps, 200);
+  MARKET.forEach(g=>{
+    let p = mktPrice(g.id);
+    for(let i=0;i<steps;i++){
+      const drift = (Math.random() - 0.5) * 2 * g.vol;
+      const pull  = (MKT_BASE - p) * 0.04;      // mean reversion
+      p = Math.max(12, Math.min(320, p + drift + pull));
+    }
+    S.mkt.price[g.id] = p;
+  });
+}
+
+function mktBuy(g){
+  const amount = Math.floor(S.cash * 0.10);
+  if(amount <= 0) return;
+  const held = mktInv(g.id);
+  // Average the entry price so topping up a position cannot rewrite the
+  // basis of what is already in it.
+  const newEntry = held > 0
+    ? (held + amount) / ((held / mktEntry(g.id)) + (amount / mktPrice(g.id)))
+    : mktPrice(g.id);
+  S.cash -= amount;
+  S.mkt.inv[g.id] = held + amount;
+  S.mkt.entry[g.id] = newEntry;
+  renderHead(); renderList(true); save();
+}
+
+function mktSell(g){
+  const v = mktValue(g.id);
+  if(v <= 0) return;
+  const profit = v - mktInv(g.id);
+  earn(v);
+  S.mkt.inv[g.id] = 0;
+  S.mkt.entry[g.id] = mktPrice(g.id);
+  if(profit > 0) S.mktProfit = (S.mktProfit || 0) + profit;
+  toast("Sold " + g.name + " for " + money(v) + " (" + (profit >= 0 ? "+" : "") + money(profit) + ")");
+  renderHead(); renderList(true); checkAchievements(); save();
 }
 
 /* ---------- training budget ----------
@@ -929,6 +1031,8 @@ let S = {
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
   repUp: {},                 // id -> true, reputation upgrades bought (permanent)
+  mkt: {price:{}, inv:{}, entry:{}, at:0},   // contracts market: prices, positions, last move
+  mktProfit: 0,              // realised profit from the market, all time
   lumps: 0,                  // training credits banked
   lumpAt: 0,                 // epoch ms the current credit started growing
   levels: {},                // staff id -> permanent training level
@@ -1063,6 +1167,20 @@ function renderHead(){
   $("sLife").textContent = money(S.lifetime);
   $("sRep").textContent = fmt(S.reputation);
 
+  const mktBox = $("mktStrip");
+  if(mktBox){
+    mktBox.style.display = marketGate() ? "flex" : "none";
+    if(marketGate()){
+      const held = MARKET.reduce((s,g)=>s + mktValue(g.id), 0);
+      const cost = MARKET.reduce((s,g)=>s + mktInv(g.id), 0);
+      const pl = held - cost;
+      $("mktN").textContent = money(held);
+      $("mktPl").textContent = cost > 0
+        ? "unrealised " + (pl >= 0 ? "+" : "") + money(pl)
+        : "no positions open";
+    }
+  }
+
   const trainBox = $("train");
   if(trainBox){
     trainBox.style.display = lumpGate() ? "flex" : "none";
@@ -1147,6 +1265,11 @@ function listSignature(){
   }
   if(tab === "training"){
     return "t|" + S.lumps + "|" + STAFF.map(d=>levelOf(d.id)).join(",");
+  }
+  if(tab === "market"){
+    // Prices move constantly, so this view rebuilds on every move rather
+    // than only when the set of rows changes.
+    return "m|" + MARKET.map(g=>Math.round(mktPrice(g.id)) + ":" + Math.round(mktInv(g.id))).join(",");
   }
   if(tab === "clients"){
     // Affordability moves with reputation, so this has to be sensitive
@@ -1297,6 +1420,37 @@ function renderList(force){
           (got ? "owned" : fmt(u.cost) + " rep") + '</div></div>';
       if(!got && afford) b.onclick = () => buyRepUpgrade(u);
       list.appendChild(b);
+    });
+    return;
+  } else if(tab === "market"){
+    const head = document.createElement("div");
+    head.className = "rep-head";
+    const total = MARKET.reduce((s,g)=>s + mktValue(g.id), 0);
+    head.innerHTML = "Contracts market" + '<span class="rep-bal">' + money(total) + ' held</span>';
+    list.appendChild(head);
+
+    MARKET.forEach(g=>{
+      const p = mktPrice(g.id), inv = mktInv(g.id), val = mktValue(g.id);
+      const move = ((p - MKT_BASE) / MKT_BASE) * 100;
+      const pl = val - inv;
+      const row = document.createElement("div");
+      row.className = "item";
+      row.innerHTML =
+        '<div class="item-ic">' + g.icon + '</div>' +
+        '<div><div class="item-n">' + g.name +
+          ' <span class="' + (move >= 0 ? "up" : "down") + '">' + (move >= 0 ? "+" : "") + move.toFixed(1) + '%</span></div>' +
+        '<div class="item-m">' + (inv > 0
+            ? "Holding " + money(inv) + " &rarr; " + money(val) +
+              ' <span class="' + (pl >= 0 ? "up" : "down") + '">' + (pl >= 0 ? "+" : "") + money(pl) + '</span>'
+            : "No position") + '</div></div>' +
+        '<div class="mkt-row">' +
+          '<button class="btn" data-act="buy">Buy 10%</button>' +
+          '<button class="btn" data-act="sell"' + (inv > 0 ? "" : " disabled") + '>Sell</button>' +
+        '</div>';
+      row.querySelector('[data-act=buy]').onclick  = () => mktBuy(g);
+      const sell = row.querySelector('[data-act=sell]');
+      if(inv > 0) sell.onclick = () => mktSell(g);
+      list.appendChild(row);
     });
     return;
   } else if(tab === "training"){
@@ -1494,6 +1648,17 @@ function load(){
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
   S.repUp      = (d.repUp && typeof d.repUp === "object") ? d.repUp : {};
+  const m = (d.mkt && typeof d.mkt === "object") ? d.mkt : {};
+  S.mkt = {price:{}, inv:{}, entry:{}, at:+m.at || 0};
+  MARKET.forEach(g=>{
+    const p = +(m.price||{})[g.id];
+    S.mkt.price[g.id] = (p > 0 && isFinite(p)) ? p : MKT_BASE;
+    const inv = +(m.inv||{})[g.id];
+    S.mkt.inv[g.id] = (inv > 0 && isFinite(inv)) ? inv : 0;
+    const e = +(m.entry||{})[g.id];
+    S.mkt.entry[g.id] = (e > 0 && isFinite(e)) ? e : MKT_BASE;
+  });
+  S.mktProfit  = +d.mktProfit || 0;
   S.lumps      = Math.min(+d.lumps || 0, LUMP_CAP);
   S.lumpAt     = +d.lumpAt || 0;
   S.levels     = (d.levels && typeof d.levels === "object") ? d.levels : {};
@@ -2150,6 +2315,7 @@ setInterval(()=>{
   // Cheap: it returns immediately once the tour is done, and only touches
   // the DOM when the step actually changes.
   coachSync();
+  marketTick();
   lumpTick();
   debtTick(dt);
   escTick();
@@ -2161,6 +2327,7 @@ setInterval(()=>{
 
 $("debtGo").onclick = remediate;
 $("trainGo").onclick = ()=>{ tab = "training"; renderList(true); };
+$("mktGo").onclick   = ()=>{ tab = "market";   renderList(true); };
 
 setInterval(save, 20000);
 
