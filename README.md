@@ -40,14 +40,37 @@ staff; staff close tickets while you are away.
   one.
 - **Selling the company** is the prestige reset. Cash, staff and upgrades
   go; reputation is permanent and worth +2% each, forever.
-- **A client roster survives every exit.** Twelve named clients, signed
-  once with reputation, each adding a flat, permanent $/s that staff and
-  upgrades resetting can't touch — from a two-chair dental office up to a
-  defence contractor that will ask about your CMMC level. Reputation
-  spent signing one is spent for good: it stops counting toward the
-  passive +2%-per-point bonus and no exit pays it back, so the roster is
-  a real tradeoff rather than a second currency.
-- **Twenty-five achievements**, on their own tab, from closing your first
+- **Eight reputation upgrades**, under the sell card, are the only thing
+  reputation is ever spent on. Each changes the terms of the *next* run
+  rather than the current one — cash and staff to start with, louder
+  pagers, a 24-hour away window, a bigger exit — so selling the company
+  unlocks how the game is played instead of only bumping a multiplier.
+- **A client roster survives every exit.** Twelve named clients, each
+  adding a flat, permanent $/s that staff and upgrades resetting can't
+  touch — from a two-chair dental office up to a defence contractor that
+  will ask about your CMMC level. Cash buys them and exits unlock them.
+  Working the whole roster is worth about 1.6x the lifetime revenue of
+  ignoring it, simulated over 55 hours.
+- **Escalated tickets** surface at random every 90–210 seconds and sit
+  for 13: income x7 for 77s, clicks x777 for 13s, or an invoice paid on
+  the spot. The one thing in the game that rewards being at the keyboard
+  at a moment you didn't choose.
+- **Technical debt** accrues on its own past 25 staff, costs 3% of income
+  per item up to twelve, and hands back everything it suppressed at 1.25x
+  when paid off. Clearing it early protects throughput; letting it pile
+  up earns more in total. Neither extreme is right.
+- **A training budget** grows on a wall clock — one credit every six
+  hours whether or not the tab is open — and buys permanent levels on a
+  staff tier that survive prestige.
+- **A contracts market**, unlocked by the vCIO, on a mean-reverting
+  random walk. Positions are stored as cash invested and the price it
+  went in at, never as units, so the market is as relevant at $10M/s as
+  at $10/s.
+- **Incident mode** is opt-in risk: three stages, each paying 35% more
+  while piling up debt faster and turning escalated tickets hostile. A
+  hostile one still pays if you catch it and halves your income for a
+  minute if you don't.
+- **Thirty-four achievements**, on their own tab, from closing your first
   ticket up through ten exits and 500 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
   gets retroactively credited for whatever it already qualifies for
@@ -84,11 +107,11 @@ Four constraints, each one a bug that actually shipped:
 2. **State is never read back out of the DOM.** That same timer parsed the
    score out of display text and wrote it back, fighting the real loop
    over the same element.
-3. **Config is never saved.** `STAFF` and `UPGRADES` are static. The save
-   holds only counts, flags and totals, merged field by field with unknown
-   ids dropped. The old save embedded balance numbers, which pinned the
-   economy to whatever it was when the file was written.
-
+3. **Config is never saved.** `STAFF`, `UPGRADES`, `CLIENTS` and every
+   list added since are static. The save holds only counts, flags and
+   totals, merged field by field with unknown ids dropped. The old save
+   embedded balance numbers, which pinned the economy to whatever it was
+   when the file was written.
 4. **A spendable currency needs two numbers.** Reputation earned and
    reputation held are separate fields. Sharing one made spending free:
    `pendingRep()` paid out `floor(sqrt(lifetime / 1e6)) - reputation`, so
@@ -107,32 +130,27 @@ revenue catches up rather than having anything clawed back.
 
 ## Status
 
-Playable, being tuned. Balance numbers are provisional.
+Playable, being tuned. Balance numbers are provisional, but the client
+curve and the core loop are simulated rather than guessed -- a bot plays
+full runs against the real game functions, and the numbers quoted above
+come out of it.
 
 Known gaps:
 
-- **Client prices were set when spending was free, and now it isn't.**
-  Under the refund bug every client was pure upside, so the roster was
-  priced as a sequence of unlocks rather than as a real cost. Now that
-  reputation spent is gone, the top of the roster looks like a bad buy: a
-  flat rate can't keep up with a multiplier the way the prices assume.
-  Meridian Aerospace wants 4,000 reputation for +$160K/s, but holding
-  those 4,000 points instead is +8,000% on everything you own — worth far
-  more than $160K/s by the time you can afford either. The early roster
-  is fine, where a few points of bonus are worth nothing and a flat $5/s
-  is transformative. Somewhere in the middle it inverts. Finding where
-  needs the full-loop simulation run again, not a guess at new numbers.
-- Selling the company unlocks nothing. `S.exits` gates two achievements
-  and nothing else, so exit #2 is the same run as exit #1 with a better
-  multiplier. The prestige loop has no new content to pull a player
-  through it.
+- **The economy runs away past about 55 simulated hours.** A bot playing
+  perfectly and prestiging on a tight trigger reaches `Infinity` and
+  `fmt()` degrades to `10000000Dc`. No human gets near it, and the sqrt
+  on the reputation cap is not enough to hold it, but there is no soft
+  cap anywhere and eventually there should be.
+- **The new systems have not been simulated against each other.** The
+  client curve was, and the core loop still paces as documented with
+  everything in place. But the bot does not open the market, declare an
+  incident, spend training credits or let debt accrue, so the combined
+  effect of four new multipliers on a long run is unmeasured.
+- **"Achievements" only just fits the phone tab bar** at 375px, and will
+  be tight once its badge shows. Moving it out of the tab bar is the
+  plan; until then it is the label most at risk of wrapping.
+- The upgrade and achievement tails are still shape rather than
+  measurement. Upgrades past AI Triage and the achievements above $1B
+  lifetime extend the existing curves by eye. Reachable is not tuned.
 - The brand mark in the sidebar is still a placeholder "M".
-- Balance and pacing across a full run haven't been tuned end to end —
-  the early game has had the most attention so far. The original client
-  roster's costs were sanity-checked against a full-loop simulation
-  (real click/buy/exit behavior, run against the actual game functions)
-  rather than guessed, but "reachable" isn't the same as "tuned." The
-  content added since — upgrades past AI Triage, the four clients past
-  Continental Freight, and the achievements above $1B lifetime — extends
-  the existing curves by shape and has *not* had that simulation run
-  against it. The tail is unverified.
