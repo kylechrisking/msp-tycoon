@@ -263,6 +263,19 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .stat-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
 .stat-v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
 
+/* Technical debt strip. Hidden entirely until there is debt, so it is not
+   a permanently dead row for the whole early game. */
+.debt{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(248,113,113,.09); border:1px solid rgba(248,113,113,.28);
+}
+.debt-t{ font-size:13px; color:var(--ink); flex:1 1 auto }
+.debt-t b{ color:var(--crit); font-family:var(--mono) }
+.debt-t span{ display:block; font-size:11px; color:var(--dim); font-family:var(--mono) }
+.debt-go{ flex:0 0 auto; font-size:12px; padding:7px 12px; border-color:rgba(248,113,113,.45); color:var(--crit) }
+.debt-go:hover{ background:rgba(248,113,113,.14) }
+
 /* ---------- prestige (lives in the store as the Sell tab) ---------- */
 .prestige-card{
   background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
@@ -457,6 +470,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
     </div>
 
+    <div class="debt" id="debt" style="display:none">
+      <div class="debt-t">
+        <b id="debtN">0</b> technical debt
+        <span id="debtDrag">dragging income 0%</span>
+      </div>
+      <button class="btn debt-go" id="debtGo" type="button">Pay down &mdash; <span id="debtBank">$0</span></button>
+    </div>
+
   </main>
 
   <aside class="store">
@@ -571,6 +592,8 @@ const ACHIEVEMENTS = [
   {id:"automated",    name:"Automate It",         icon:"⚙️", desc:"Unlock hold-to-work.",                  check:()=>!!S.upgrades.queue},
   {id:"caught",       name:"Caught It",           icon:"🔥", desc:"Claim an escalated ticket.",            check:()=>(S.escCaught||0)>=1},
   {id:"responder",    name:"First Responder",     icon:"🚨", desc:"Claim 50 escalated tickets.",           check:()=>(S.escCaught||0)>=50},
+  {id:"paidoff",      name:"Paid It Down",        icon:"🧹", desc:"Pay down technical debt.",              check:()=>(S.remediated||0)>=1},
+  {id:"maxdebt",      name:"Deferred Maintenance",icon:"🕳️", desc:"Let technical debt reach its ceiling.",  check:()=>debtCount()>=DEBT_MAX},
   {id:"first-exit",   name:"Sold",                icon:"🤝", desc:"Sell the company for the first time.",  check:()=>S.exits>=1},
   {id:"serial",       name:"Serial Entrepreneur", icon:"🔁", desc:"Sell the company 5 times.",             check:()=>S.exits>=5},
   {id:"repeat",       name:"Repeat Offender",     icon:"♻️", desc:"Sell the company 10 times.",            check:()=>S.exits>=10},
@@ -660,6 +683,52 @@ function buyClient(cl){
   S.cash -= cl.cost;
   S.clients[cl.id] = true;
   toast("Signed " + cl.name + ".");
+  renderHead(); renderList(); checkAchievements(); save();
+}
+
+/* ---------- technical debt ----------
+   Cookie Clicker's wrinklers, and the one mechanic that needed almost no
+   translation. Debt accrues on its own, drags income down while it sits
+   there, and hands back more than it took when it is finally paid off.
+
+   The choice it creates is the whole point: remediating early keeps
+   income high, letting it pile up earns more in total but costs you
+   throughput to get there. Doing nothing is not the optimal play in
+   either direction, which is what makes it worth a glance. */
+const DEBT_MAX    = 12;      // ceiling, so income cannot be strangled entirely
+const DEBT_DRAG   = 0.03;    // income lost per outstanding item
+const DEBT_YIELD  = 1.25;    // what the suppressed income is worth when paid off
+const DEBT_EVERY  = 150000;  // ms between new items
+const debtGate = () => S.staffTotal >= 25;
+
+const debtCount = () => Math.min(S.debt || 0, DEBT_MAX);
+const debtMult  = () => 1 - DEBT_DRAG * debtCount();
+
+function debtTick(dt){
+  if(!debtGate()) return;
+  const now = Date.now();
+  if(!S.nextDebt) S.nextDebt = now + DEBT_EVERY;
+  if(now >= S.nextDebt && (S.debt || 0) < DEBT_MAX){
+    S.debt = (S.debt || 0) + 1;
+    S.nextDebt = now + DEBT_EVERY;
+  } else if(now >= S.nextDebt){
+    S.nextDebt = now + DEBT_EVERY;
+  }
+  // Whatever the drag took this tick is banked at a premium rather than
+  // simply lost -- that is what makes leaving it alone a real option.
+  if(debtCount() > 0){
+    const suppressed = baseRate() * buffMult("rateMult") * DEBT_DRAG * debtCount();
+    S.debtBank = (S.debtBank || 0) + suppressed * DEBT_YIELD * dt;
+  }
+}
+
+function remediate(){
+  if(!(S.debtBank > 0) && !(S.debt > 0)) return;
+  const paid = S.debtBank || 0;
+  earn(paid);
+  S.debt = 0; S.debtBank = 0; S.nextDebt = Date.now() + DEBT_EVERY;
+  S.remediated = (S.remediated || 0) + 1;
+  toast("Debt paid down. " + money(paid) + " recovered.");
   renderHead(); renderList(); checkAchievements(); save();
 }
 
@@ -790,6 +859,10 @@ let S = {
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
   repUp: {},                 // id -> true, reputation upgrades bought (permanent)
+  debt: 0,                   // outstanding technical debt items
+  debtBank: 0,               // cash the drag has held back, paid out on remediation
+  nextDebt: 0,               // epoch ms the next debt item lands
+  remediated: 0,             // times debt has been paid off, all time
   buffs: {},                 // escalation id -> epoch ms the effect ends
   nextEsc: 0,                // epoch ms the next escalated ticket surfaces
   escCaught: 0,              // escalated tickets claimed, all time
@@ -856,7 +929,7 @@ function rateOf(def){
 const baseRate  = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
 // What the game actually pays out: base production, times whatever
 // escalated tickets are currently running.
-const totalRate = () => baseRate() * buffMult("rateMult");
+const totalRate = () => baseRate() * buffMult("rateMult") * debtMult();
 
 function clickValue(){
   let v = 1;
@@ -916,6 +989,18 @@ function renderHead(){
   $("sStaff").textContent = fmt(S.staffTotal);
   $("sLife").textContent = money(S.lifetime);
   $("sRep").textContent = fmt(S.reputation);
+
+  const debtBox = $("debt");
+  if(debtBox){
+    const n = debtCount();
+    debtBox.style.display = n > 0 ? "flex" : "none";
+    if(n > 0){
+      $("debtN").textContent = n;
+      $("debtDrag").textContent = "dragging income " + Math.round(DEBT_DRAG * n * 100) +
+        "%, held back at " + DEBT_YIELD + "x";
+      $("debtBank").textContent = money(S.debtBank || 0);
+    }
+  }
 
   // The Sell tab flags itself when an exit is actually available.
   const prBadge = $("prBadge");
@@ -1297,6 +1382,10 @@ function load(){
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
   S.repUp      = (d.repUp && typeof d.repUp === "object") ? d.repUp : {};
+  S.debt       = Math.min(+d.debt || 0, DEBT_MAX);
+  S.debtBank   = +d.debtBank || 0;
+  S.nextDebt   = +d.nextDebt || 0;
+  S.remediated = +d.remediated || 0;
   // Buffs are end timestamps, so anything that expired while away is
   // simply dropped rather than resuming with time left on it.
   S.buffs      = {};
@@ -1945,12 +2034,15 @@ setInterval(()=>{
   // Cheap: it returns immediately once the tour is done, and only touches
   // the DOM when the step actually changes.
   coachSync();
+  debtTick(dt);
   escTick();
   renderBuffs();
   // The hovered row's numbers move with income, so refresh what it says.
   if(tipFor && document.contains(tipFor)) showTip(tipFor);
   else if(tipFor) hideTip();
 }, TICK_MS);
+
+$("debtGo").onclick = remediate;
 
 setInterval(save, 20000);
 
