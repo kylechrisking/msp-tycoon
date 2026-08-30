@@ -29,21 +29,23 @@ staff; staff close tickets while you are away.
 - **Eight staff tiers**, Help Desk Tech up to a second branch office.
   Each copy costs 15% more than the last, so every tier eventually gives
   way to the next.
-- **Upgrades** are real tools of the trade — RMM, PSA, SIEM, SOC 2, AI
-  triage — that either double one staff line or lift everything.
+- **Nineteen upgrades**, real tools of the trade — RMM, PSA, SIEM, SOC 2,
+  AI triage, managed XDR — that either double one staff line or lift
+  everything. Every staff tier now has exactly one doubler of its own;
+  the top three used to have none, so a late run had nothing left to buy
+  for its most expensive hires.
 - **Holding is earned.** Queue Runner unlocks hold-to-work at one ticket
   a second; two later upgrades take it to five. Deliberately slower than
   clicking by hand, so holding is the lazy option rather than the optimal
   one.
 - **Selling the company** is the prestige reset. Cash, staff and upgrades
   go; reputation is permanent and worth +2% each, forever.
-- **A client roster survives every exit.** Eight named clients, signed
+- **A client roster survives every exit.** Twelve named clients, signed
   once with reputation, each adding a flat, permanent $/s that staff and
-  upgrades resetting can't touch. Spending reputation on a client means
-  not banking it for the passive bonus — a real tradeoff, not a second
-  currency.
-- **Fifteen achievements**, on their own tab, from closing your first
-  ticket up through five exits and 200 reputation. Each one is checked
+  upgrades resetting can't touch — from a two-chair dental office up to a
+  defence contractor that will ask about your CMMC level.
+- **Twenty-five achievements**, on their own tab, from closing your first
+  ticket up through ten exits and 500 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
   gets retroactively credited for whatever it already qualifies for
   rather than making them earn it twice.
@@ -93,12 +95,26 @@ Playable, being tuned. Balance numbers are provisional.
 
 Known gaps:
 
-- Content is deliberately thin — eight staff, thirteen upgrades, fifteen
-  achievements, eight clients — enough to prove each loop before more
-  gets built on top.
+- **Reputation spent on a client comes back.** `pendingRep()` is
+  `floor(sqrt(lifetime / 1e6)) - reputation`, so spending reputation
+  lowers the subtrahend and the next exit hands the same points straight
+  back at no extra revenue. Signing a client is therefore a loan against
+  your next exit, not the tradeoff against the passive +2% bonus it was
+  written to be. Fixing it means either tracking reputation ever earned
+  separately from reputation held, or pricing clients in something else
+  — both change prestige maths for existing saves, so it is a deliberate
+  decision rather than a patch.
+- Selling the company unlocks nothing. `S.exits` gates two achievements
+  and nothing else, so exit #2 is the same run as exit #1 with a better
+  multiplier. The prestige loop has no new content to pull a player
+  through it.
 - The brand mark in the sidebar is still a placeholder "M".
 - Balance and pacing across a full run haven't been tuned end to end —
-  the early game has had the most attention so far. The client roster's
-  costs were at least sanity-checked against a full-loop simulation
+  the early game has had the most attention so far. The original client
+  roster's costs were sanity-checked against a full-loop simulation
   (real click/buy/exit behavior, run against the actual game functions)
-  rather than guessed, but "reachable" isn't the same as "tuned."
+  rather than guessed, but "reachable" isn't the same as "tuned." The
+  content added since — upgrades past AI Triage, the four clients past
+  Continental Freight, and the achievements above $1B lifetime — extends
+  the existing curves by shape and has *not* had that simulation run
+  against it. The tail is unverified.

@@ -494,12 +494,18 @@ const UPGRADES = [
   {id:"kb",        name:"Knowledge Base",     icon:"📚", cost:500,        kind:"staff",  target:"helpdesk", mult:2, need:()=>c("helpdesk")>=5,  blurb:"Help Desk output doubled."},
   {id:"rmm",       name:"RMM Agent",          icon:"🔧", cost:2500,       kind:"staff",  target:"sysadmin", mult:2, need:()=>c("sysadmin")>=5,  blurb:"Sysadmin output doubled."},
   {id:"scripts",   name:"Automation Scripts", icon:"📜", cost:5000,       kind:"click",  mult:2, need:()=>S.clicks>=100,          blurb:"Double click value again."},
+  {id:"triage",    name:"Triage Rules",       icon:"🧭", cost:150000,     kind:"click",  mult:2, need:()=>S.clicks>=500,          blurb:"The right ticket, the right bench. Double click value again."},
   {id:"monitor",   name:"Monitoring Stack",   icon:"📡", cost:20000,      kind:"staff",  target:"neteng", mult:2, need:()=>c("neteng")>=5,      blurb:"Network Engineer output doubled."},
   {id:"psa",       name:"PSA Platform",       icon:"🗂️", cost:75000,      kind:"global", mult:1.25, need:()=>S.staffTotal>=25,    blurb:"All staff +25%."},
   {id:"siem",      name:"SIEM",               icon:"🔎", cost:250000,     kind:"staff",  target:"seceng", mult:2, need:()=>c("seceng")>=5,      blurb:"Security output doubled."},
   {id:"soc2",      name:"SOC 2 Report",       icon:"📋", cost:1200000,    kind:"global", mult:1.5,  need:()=>S.staffTotal>=50,    blurb:"Enterprise clients. All staff +50%."},
   {id:"iac",       name:"Infrastructure as Code", icon:"🧱", cost:6000000, kind:"staff", target:"cloud", mult:2, need:()=>c("cloud")>=5,      blurb:"Cloud output doubled."},
-  {id:"ai",        name:"AI Triage",          icon:"🤖", cost:40000000,   kind:"global", mult:2, need:()=>S.staffTotal>=100,      blurb:"All staff doubled."}
+  {id:"ai",        name:"AI Triage",          icon:"🤖", cost:40000000,   kind:"global", mult:2, need:()=>S.staffTotal>=100,      blurb:"All staff doubled."},
+  {id:"qbr",       name:"Quarterly Reviews",  icon:"📈", cost:45000000,   kind:"staff",  target:"vcio", mult:2, need:()=>c("vcio")>=5,        blurb:"A deck that renews the contract. vCIO output doubled."},
+  {id:"rota",      name:"Follow-the-Sun Rota",icon:"🌍", cost:600000000,  kind:"staff",  target:"noc", mult:2, need:()=>c("noc")>=5,          blurb:"Three time zones, one queue. NOC output doubled."},
+  {id:"xdr",       name:"Managed XDR",        icon:"🕵️", cost:900000000,  kind:"global", mult:1.5, need:()=>S.staffTotal>=200,   blurb:"Detection someone else stays up for. All staff +50%."},
+  {id:"playbook",  name:"Delivery Playbook",  icon:"📕", cost:10000000000, kind:"staff", target:"branch", mult:2, need:()=>c("branch")>=5,    blurb:"Everything the first office learned, written down. Second Branch output doubled."},
+  {id:"tuckin",    name:"Tuck-In Acquisition",icon:"🧩", cost:60000000000, kind:"global", mult:2, need:()=>S.staffTotal>=350,     blurb:"You bought the competition. All staff doubled."}
 ];
 
 /* Checked, not stored: an achievement is a pure function of state that is
@@ -510,18 +516,28 @@ const ACHIEVEMENTS = [
   {id:"first-ticket", name:"First Ticket",        icon:"🎫", desc:"Close your first ticket.",              check:()=>S.clicks>=1},
   {id:"century",      name:"Century",             icon:"💯", desc:"Close 100 tickets.",                    check:()=>S.clicks>=100},
   {id:"ticket-machine",name:"Ticket Machine",     icon:"🎟️", desc:"Close 1,000 tickets.",                  check:()=>S.clicks>=1000},
+  {id:"tsunami",      name:"Ticket Tsunami",     icon:"🌊", desc:"Close 10,000 tickets.",                 check:()=>S.clicks>=10000},
   {id:"first-hire",   name:"You're Not Alone",    icon:"🎧", desc:"Hire your first employee.",             check:()=>S.staffTotal>=1},
   {id:"full-roster",  name:"Full Roster",         icon:"🧑‍💼", desc:"Own at least one of every staff tier.", check:()=>STAFF.every(d=>c(d.id)>0)},
   {id:"small-army",   name:"Small Army",          icon:"👥", desc:"Reach 100 total staff.",                check:()=>S.staffTotal>=100},
+  {id:"payroll",      name:"Payroll Problem",     icon:"🧾", desc:"Reach 250 total staff.",                check:()=>S.staffTotal>=250},
+  {id:"deep-bench",   name:"Deep Bench",          icon:"🪑", desc:"Own 100 of a single staff tier.",       check:()=>STAFF.some(d=>c(d.id)>=100)},
   {id:"six-figures",  name:"Six Figures",         icon:"💵", desc:"Earn $100,000 lifetime revenue.",       check:()=>S.lifetime>=1e5},
   {id:"seven-figures",name:"Seven Figures",       icon:"💰", desc:"Earn $1,000,000 lifetime revenue.",     check:()=>S.lifetime>=1e6},
   {id:"eight-figures",name:"Enterprise Scale",    icon:"🏢", desc:"Earn $100,000,000 lifetime revenue.",   check:()=>S.lifetime>=1e8},
+  {id:"ten-figures",  name:"Ten Figures",         icon:"🏦", desc:"Earn $1,000,000,000 lifetime revenue.", check:()=>S.lifetime>=1e9},
+  {id:"thirteen",     name:"Trillion Under Management", icon:"🌐", desc:"Earn $1,000,000,000,000 lifetime revenue.", check:()=>S.lifetime>=1e12},
+  {id:"per-second",   name:"A Million a Second",  icon:"⏱️", desc:"Reach $1,000,000/s in income.",         check:()=>totalRate()>=1e6},
   {id:"tool-belt",    name:"Tool Belt",           icon:"🧰", desc:"Buy every upgrade.",                    check:()=>UPGRADES.every(u=>S.upgrades[u.id])},
   {id:"automated",    name:"Automate It",         icon:"⚙️", desc:"Unlock hold-to-work.",                  check:()=>!!S.upgrades.queue},
   {id:"first-exit",   name:"Sold",                icon:"🤝", desc:"Sell the company for the first time.",  check:()=>S.exits>=1},
   {id:"serial",       name:"Serial Entrepreneur", icon:"🔁", desc:"Sell the company 5 times.",             check:()=>S.exits>=5},
+  {id:"repeat",       name:"Repeat Offender",     icon:"♻️", desc:"Sell the company 10 times.",            check:()=>S.exits>=10},
+  {id:"first-client", name:"First Contract",      icon:"📝", desc:"Sign your first client.",               check:()=>CLIENTS.some(cl=>S.clients[cl.id])},
+  {id:"book",         name:"Book of Business",    icon:"📒", desc:"Sign every client.",                    check:()=>CLIENTS.every(cl=>S.clients[cl.id])},
   {id:"reputable",    name:"Reputable",           icon:"⭐", desc:"Reach 50 reputation.",                  check:()=>S.reputation>=50},
   {id:"legend",       name:"Industry Legend",     icon:"🏆", desc:"Reach 200 reputation.",                 check:()=>S.reputation>=200},
+  {id:"household",    name:"Household Name",      icon:"📣", desc:"Reach 500 reputation.",                 check:()=>S.reputation>=500},
 ];
 
 function checkAchievements(){
@@ -555,6 +571,10 @@ const CLIENTS = [
   {id:"logistics",  name:"Vantage Logistics",          icon:"🚚", cost:60,  rate:600,  blurb:"Tracks a thousand trucks. Trusts nothing to chance."},
   {id:"credit",     name:"Prairie State Credit Union", icon:"🏦", cost:120, rate:1500, blurb:"Regulated to the letter. Audited twice a year."},
   {id:"freight",    name:"Continental Freight Holdings", icon:"🚢", cost:250, rate:4000, blurb:"The account that pays for the second branch."},
+  {id:"health",     name:"Beacon Health Network",      icon:"🩺", cost:500,  rate:10000,  blurb:"Eleven clinics on one record system. Downtime is a patient-safety event."},
+  {id:"schools",    name:"Halverson Public Schools",   icon:"🎓", cost:1000, rate:25000,  blurb:"Twelve thousand devices and one summer to reimage them."},
+  {id:"port",       name:"Port Authority of Two Rivers", icon:"⚓", cost:2000, rate:62000, blurb:"Critical infrastructure. The audits have audits."},
+  {id:"aero",       name:"Meridian Aerospace",         icon:"✈️", cost:4000, rate:160000, blurb:"CMMC Level 2, and they will check."},
 ];
 
 function clientBonusRate(){
