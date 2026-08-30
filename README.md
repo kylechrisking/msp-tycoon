@@ -21,6 +21,13 @@ index.html
 
 That is the whole game — one self-contained HTML file.
 
+Accounts and cloud saves are optional and live entirely on the host. The
+game calls `./api.php` for them and falls back to "playing signed out"
+whenever that call fails, which is exactly what happens when you open
+this file directly. That endpoint is not in this repo and is not needed
+to run, develop, or play the game; on rootlabs.us it rides the site's
+existing WordPress login.
+
 ## How it plays
 
 One currency, one verb. Closing a ticket earns revenue; revenue buys
@@ -70,8 +77,8 @@ staff; staff close tickets while you are away.
   while piling up debt faster and turning escalated tickets hostile. A
   hostile one still pays if you catch it and halves your income for a
   minute if you don't.
-- **Thirty-four achievements**, on their own tab, from closing your first
-  ticket up through ten exits and 500 reputation. Each one is checked
+- **Thirty-four achievements**, in the profile panel, from closing your
+  first ticket up through ten exits and 500 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
   gets retroactively credited for whatever it already qualifies for
   rather than making them earn it twice.
@@ -95,6 +102,20 @@ carries a hover tooltip with the numbers that actually justify a
 purchase — output, share of payroll, seconds to pay for itself — and on
 a phone, where there's no hover, that same information is printed
 directly on the row.
+
+## Accounts
+
+The profile button reuses the same icon the rest of rootlabs.us uses for
+its site menu, and the panel behind it holds the account controls and the
+achievement list.
+
+There is no account system in this game and there must never be one. On
+rootlabs.us the endpoint asks WordPress who the visitor is; no password
+is ever read, written or seen. localStorage stays the source of truth and
+the cloud copy is pushed and pulled by hand, never on a timer -- partly
+so a lapsed session cannot quietly clobber a good local save, and partly
+because bootstrapping WordPress on every autosave would flatten a small
+server.
 
 ## Design rules
 
@@ -147,9 +168,6 @@ Known gaps:
   everything in place. But the bot does not open the market, declare an
   incident, spend training credits or let debt accrue, so the combined
   effect of four new multipliers on a long run is unmeasured.
-- **"Achievements" only just fits the phone tab bar** at 375px, and will
-  be tight once its badge shows. Moving it out of the tab bar is the
-  plan; until then it is the label most at risk of wrapping.
 - The upgrade and achievement tails are still shape rather than
   measurement. Upgrades past AI Triage and the achievements above $1B
   lifetime extend the existing curves by eye. Reachable is not tuned.

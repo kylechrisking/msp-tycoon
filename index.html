@@ -182,6 +182,59 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
        font-size:11px; letter-spacing:.04em; text-transform:uppercase;
        padding:4px 9px; border-radius:999px; white-space:nowrap }
 
+/* ---------- profile ----------
+   Sits above everything, including the escalated tickets, so the panel is
+   never fighting a spawned P1 for the same corner. */
+/* Above the tour coach (70), the tooltip and escalations (60): an open
+   panel is a deliberate action and should not be painted over. */
+.profile{ position:fixed; top:14px; right:16px; z-index:80 }
+.profile-btn{
+  position:relative; width:38px; height:38px; padding:0; border-radius:50%;
+  display:grid; place-items:center; cursor:pointer;
+  background:var(--panel); border:1px solid var(--line); color:var(--dim);
+}
+.profile-btn:hover{ color:var(--ink); border-color:var(--accent) }
+.profile-btn svg{ width:20px; height:20px; fill:none; stroke:currentColor }
+/* Unread-style dot: something has been unlocked since the panel was opened. */
+.profile-dot{
+  position:absolute; top:-2px; right:-2px; width:10px; height:10px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+}
+.profile-panel{
+  position:absolute; top:46px; right:0; width:300px; max-height:70vh;
+  display:none; flex-direction:column; overflow:hidden;
+  background:var(--panel); border:1px solid var(--line); border-radius:12px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
+}
+.profile.open .profile-panel{ display:flex }
+.pp-sec{ padding:12px 14px; border-bottom:1px solid var(--line) }
+.pp-sec:last-child{ border-bottom:0 }
+.pp-grow{ min-height:0; display:flex; flex-direction:column }
+.pp-sec h6{
+  margin:0 0 8px; font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--dim); font-weight:600;
+}
+.pp-sec h6 span{ color:var(--accent); letter-spacing:.04em }
+.pp-account{ font-size:13px; color:var(--ink) }
+.pp-who{ display:block; margin-bottom:9px; color:var(--dim) }
+.pp-who b{ color:var(--ink) }
+.pp-row{ display:flex; gap:6px; flex-wrap:wrap }
+.pp-row .btn{ font-size:11px; padding:6px 10px }
+.pp-note{ margin-top:8px; font-size:11px; color:var(--faint); line-height:1.5 }
+.pp-ach{ overflow-y:auto; min-height:0; display:flex; flex-direction:column; gap:5px }
+.pp-a{ display:flex; gap:9px; align-items:center; font-size:12px; opacity:.4 }
+.pp-a.got{ opacity:1 }
+.pp-a i{ font-style:normal; font-size:15px; width:20px; text-align:center }
+.pp-a b{ font-weight:600; color:var(--ink); display:block }
+.pp-a s{ text-decoration:none; color:var(--dim); font-size:11px; display:block }
+
+/* On a phone the panel is nearly full width rather than a 300px card
+   floating off the right edge. */
+@media (max-width:520px){
+  .profile{ top:10px; right:10px }
+  .profile-panel{ width:calc(100vw - 20px); right:0 }
+}
+
 /* ---------- shell ---------- */
 .app{display:grid;grid-template-columns:minmax(0,1fr) 384px;min-height:100vh}
 @media(max-width:900px){.app{grid-template-columns:1fr}}
@@ -458,6 +511,26 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
 <canvas id="floor" aria-hidden="true"></canvas>
 
+<!-- Profile. The icon is the same one the rest of rootlabs.us uses in its
+     site menu, so the game does not introduce a second visual language for
+     "your account". -->
+<div class="profile" id="profile">
+  <button class="profile-btn" id="profileBtn" aria-haspopup="true" aria-expanded="false" aria-label="Profile and achievements">
+    <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path></svg>
+    <span class="profile-dot" id="profileDot" style="display:none"></span>
+  </button>
+  <div class="profile-panel" id="profilePanel" role="dialog" aria-label="Profile">
+    <div class="pp-sec">
+      <h6>Account</h6>
+      <div id="ppAccount" class="pp-account">Checking&hellip;</div>
+    </div>
+    <div class="pp-sec pp-grow">
+      <h6>Achievements <span id="ppAchCount"></span></h6>
+      <div id="ppAch" class="pp-ach"></div>
+    </div>
+  </div>
+</div>
+
 <div class="app">
   <main class="main">
     <div class="brand">
@@ -534,7 +607,6 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
       <button class="tab" data-tab="prestige">Sell <span class="badge" id="prBadge" style="display:none">!</span></button>
       <button class="tab" data-tab="clients">Clients <span class="badge" id="clBadge" style="display:none">0</span></button>
-      <button class="tab" data-tab="awards">Achievements <span class="badge" id="awBadge" style="display:none">0</span></button>
     </div>
     <div class="list" id="list"></div>
     <div class="bar">
@@ -672,7 +744,7 @@ function checkAchievements(){
   });
   if(unlocked){
     renderHead();
-    if(tab === "awards") renderList(true);
+    renderProfileAch(); syncProfileDot();
   }
 }
 
@@ -1269,13 +1341,6 @@ function renderHead(){
   badge.style.display = avail ? "inline-block" : "none";
   badge.textContent = avail;
 
-  const awBadge = $("awBadge");
-  if(awBadge){
-    const unlocked = Object.keys(S.ach).length;
-    awBadge.style.display = unlocked ? "inline-block" : "none";
-    awBadge.textContent = unlocked + "/" + ACHIEVEMENTS.length;
-  }
-
   const clBadge = $("clBadge");
   if(clBadge){
     const clAvail = CLIENTS.filter((cl,i)=>{
@@ -1317,9 +1382,6 @@ function listSignature(){
     // Rebuild as the headline numbers move, but not every tick.
     return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000) +
            "|" + Object.keys(S.repUp).length + "|" + incidentStage();
-  }
-  if(tab === "awards"){
-    return "a|" + Object.keys(S.ach).length;
   }
   if(tab === "training"){
     return "t|" + S.lumps + "|" + STAFF.map(d=>levelOf(d.id)).join(",");
@@ -1598,22 +1660,6 @@ function renderList(force){
           '<div class="item-m unlock-hint">Sell the company ' + need + ' more time' + (need === 1 ? "" : "s") + ' to unlock</div></div>' +
           '<div class="item-r"><div class="item-c locked-price">' + money(cl.cost) + '</div></div>';
       }
-      list.appendChild(b);
-    });
-    return;
-  } else if(tab === "awards"){
-    // Shown unlocked or locked, never hidden -- a locked row with its
-    // condition still visible is a goal, not a spoiler, and matches how
-    // the staff tab already treats what you haven't reached yet.
-    ACHIEVEMENTS.forEach(a=>{
-      const got = !!S.ach[a.id];
-      const b = document.createElement("div");
-      b.className = "item ach" + (got ? " got" : " locked");
-      b.innerHTML =
-        '<div class="item-ic">' + (got ? a.icon : "🔒") + '</div>' +
-        '<div><div class="item-n">' + a.name + '</div>' +
-        '<div class="item-m">' + a.desc + '</div></div>' +
-        (got ? '<div class="item-r"><div class="item-c ach-got">&#10003;</div></div>' : '');
       list.appendChild(b);
     });
     return;
@@ -2396,6 +2442,154 @@ function renderBuffs(){
   ).join("");
 }
 
+/* ---------- profile, account and cloud saves ----------
+   The whole of this section is optional. api.php lives on rootlabs.us,
+   not in this repo, and every call to it is allowed to fail: opened as a
+   local file, offline, or hosted anywhere without that endpoint, the
+   panel simply reads "playing signed out" and the game is unaffected.
+   localStorage remains the source of truth in every case -- the cloud is
+   a copy the player pushes and pulls by hand, never a dependency, and
+   never on a timer, because bootstrapping WordPress is not free. */
+const API = "./api.php";
+let account = {loggedIn:false, name:"", nonce:"", hasSave:false, login:"", logout:"", reachable:false};
+let syncing = false;
+
+async function api(action, opts){
+  const res = await fetch(API + "?action=" + action, Object.assign({
+    credentials: "same-origin",
+    headers: {"Accept":"application/json"}
+  }, opts || {}));
+  const body = await res.json().catch(()=>null);
+  if(!body) throw new Error("bad response");
+  return {status: res.status, body};
+}
+
+async function refreshAccount(){
+  try{
+    const {body} = await api("me");
+    if(body && body.ok){
+      account = Object.assign({}, account, body, {reachable:true});
+    } else {
+      account.reachable = false;
+    }
+  }catch(e){
+    // No endpoint, no network, or a local file. All the same thing here.
+    account.reachable = false;
+  }
+  renderProfile();
+}
+
+async function cloudSave(){
+  if(syncing || !account.loggedIn) return;
+  syncing = true; renderProfile();
+  try{
+    S.lastSeen = Date.now();
+    const {status, body} = await api("save", {
+      method: "POST",
+      headers: {"Content-Type":"application/json", "X-MSPT-Nonce": account.nonce},
+      body: JSON.stringify(S)
+    });
+    if(body && body.ok){ account.hasSave = true; toast("Saved to your account."); }
+    // A stale nonce means the login lapsed while the tab sat open.
+    else if(status === 403 || status === 401){ toast("Session expired. Log in again."); await refreshAccount(); }
+    else toast("Could not save to your account.");
+  }catch(e){ toast("Could not reach your account."); }
+  syncing = false; renderProfile();
+}
+
+async function cloudLoad(){
+  if(syncing || !account.loggedIn) return;
+  if(!confirm("Load the save on your account?\n\nThis replaces the game in this browser.")) return;
+  syncing = true; renderProfile();
+  try{
+    const {body} = await api("load");
+    if(body && body.ok && body.save){
+      // Straight through the same validator localStorage goes through, so
+      // nothing from the server is trusted any further than a local save.
+      localStorage.setItem(SAVE_KEY, body.save);
+      load();
+      renderHead(); renderList(true); checkAchievements();
+      toast("Loaded from your account.");
+    } else {
+      toast(body && body.ok ? "No save on your account yet." : "Could not load.");
+    }
+  }catch(e){ toast("Could not reach your account."); }
+  syncing = false; renderProfile();
+}
+
+function renderProfile(){
+  const box = $("ppAccount");
+  if(!box) return;
+  if(!account.reachable){
+    box.innerHTML = '<span class="pp-who">Playing signed out.</span>' +
+      '<div class="pp-note">Accounts are not available here &mdash; the game is running without its server. ' +
+      'Progress is saved in this browser as normal.</div>';
+  } else if(!account.loggedIn){
+    box.innerHTML = '<span class="pp-who">Not signed in.</span>' +
+      '<div class="pp-row"><a class="btn" href="' + account.login + '">Log in</a></div>' +
+      '<div class="pp-note">Signing in lets you keep a copy of your save on your account and pick it up on another device. ' +
+      'Progress is saved in this browser either way.</div>';
+  } else {
+    box.innerHTML = '<span class="pp-who">Signed in as <b>' + esc(account.name) + '</b></span>' +
+      '<div class="pp-row">' +
+        '<button class="btn" id="ppSave"' + (syncing ? " disabled" : "") + '>' + (syncing ? "Working…" : "Save to account") + '</button>' +
+        '<button class="btn" id="ppLoad"' + (syncing || !account.hasSave ? " disabled" : "") + '>Load</button>' +
+        '<a class="btn" href="' + account.logout + '">Log out</a>' +
+      '</div>' +
+      '<div class="pp-note">' + (account.hasSave ? "You have a save on your account." : "Nothing saved to your account yet.") +
+      ' This browser is still the live copy; syncing is manual.</div>';
+    const s = $("ppSave"), l = $("ppLoad");
+    if(s) s.onclick = cloudSave;
+    if(l) l.onclick = cloudLoad;
+  }
+}
+
+/* Achievements moved out of the tab bar and in here. */
+function renderProfileAch(){
+  const box = $("ppAch");
+  if(!box) return;
+  const got = Object.keys(S.ach).length;
+  $("ppAchCount").textContent = got + "/" + ACHIEVEMENTS.length;
+  box.innerHTML = ACHIEVEMENTS.map(a=>
+    '<div class="pp-a' + (S.ach[a.id] ? " got" : "") + '">' +
+      '<i>' + (S.ach[a.id] ? a.icon : "🔒") + '</i>' +
+      '<div><b>' + a.name + '</b><s>' + a.desc + '</s></div>' +
+    '</div>').join("");
+}
+
+// Text from the server is the only string in the game that did not come
+// from this file, so it is the only one that needs escaping.
+function esc(s){
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[ch]);
+}
+
+let achSeen = 0;
+function syncProfileDot(){
+  const dot = $("profileDot");
+  if(dot) dot.style.display = Object.keys(S.ach).length > achSeen ? "block" : "none";
+}
+
+const profileEl = $("profile"), profileBtn = $("profileBtn");
+function closeProfile(){
+  profileEl.classList.remove("open");
+  profileBtn.setAttribute("aria-expanded", "false");
+}
+profileBtn.onclick = e => {
+  e.stopPropagation();
+  const open = profileEl.classList.toggle("open");
+  profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  if(open){
+    renderProfileAch(); renderProfile();
+    achSeen = Object.keys(S.ach).length;   // opening it clears the dot
+    syncProfileDot();
+  }
+};
+// Click-away and Escape both close it, and clicks inside must not.
+$("profilePanel").addEventListener("click", e => e.stopPropagation());
+addEventListener("click", () => { if(profileEl.classList.contains("open")) closeProfile(); });
+addEventListener("keydown", e => { if(e.key === "Escape") closeProfile(); });
+
 /* ---------- the one and only game loop ---------- */
 let last = Date.now();
 setInterval(()=>{
@@ -2436,6 +2630,11 @@ coachSync();
 // -- retroactively award them on load rather than making a returning
 // player re-earn what they'd already done.
 checkAchievements();
+renderProfileAch();
+syncProfileDot();
+// Fire-and-forget: the game is fully playable before this resolves, and
+// stays playable if it never does.
+refreshAccount();
 
 // Registration failing (unsupported browser, blocked, served over plain
 // http) should never be a game-breaking error -- offline play and the
