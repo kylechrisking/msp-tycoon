@@ -158,6 +158,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   animation:escIn .25s ease-out, escPulse 1.4s ease-in-out .25s infinite;
 }
 .esc:hover{ filter:brightness(1.1); }
+/* A hostile one has to be unmistakable at a glance -- it is the only
+   thing on screen that costs you something for being ignored. */
+.esc-hostile{
+  background:linear-gradient(160deg,#b93bd4,#6d28d9);
+  box-shadow:0 0 0 3px rgba(185,59,212,.28), 0 10px 30px rgba(109,40,217,.5);
+}
 /* Scales up but never fades in: a renderer that freezes animations at
    their first frame would otherwise leave the thing invisible and
    unclickable rather than merely un-animated. */
@@ -334,6 +340,8 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   text-transform:uppercase; color:var(--dim);
 }
 .rep-bal{ color:var(--warn); letter-spacing:.04em }
+.inc-card{ margin-top:18px }
+.inc-card .pc-go + .pc-go{ margin-top:8px }
 
 /* ---------- store ---------- */
 .store{background:var(--bg2);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
@@ -634,6 +642,8 @@ const ACHIEVEMENTS = [
   {id:"responder",    name:"First Responder",     icon:"🚨", desc:"Claim 50 escalated tickets.",           check:()=>(S.escCaught||0)>=50},
   {id:"paidoff",      name:"Paid It Down",        icon:"🧹", desc:"Pay down technical debt.",              check:()=>(S.remediated||0)>=1},
   {id:"trader",       name:"Arbitrage",           icon:"📈", desc:"Turn a profit on the contracts market.",check:()=>(S.mktProfit||0)>0},
+  {id:"declared",     name:"All Hands On Deck",   icon:"☣️", desc:"Declare an incident.",                  check:()=>(S.incidentPeak||0)>=1},
+  {id:"fullscale",    name:"Total Containment",   icon:"🧨", desc:"Reach incident stage 3.",               check:()=>(S.incidentPeak||0)>=INCIDENT_MAX},
   {id:"trained",      name:"Certified",           icon:"📜", desc:"Spend a training credit.",              check:()=>STAFF.some(d=>levelOf(d.id)>0)},
   {id:"maxtrained",   name:"Fully Certified",     icon:"🎖️", desc:"Take a staff tier to training level 10.", check:()=>STAFF.some(d=>levelOf(d.id)>=LEVEL_MAX)},
   {id:"maxdebt",      name:"Deferred Maintenance",icon:"🕳️", desc:"Let technical debt reach its ceiling.",  check:()=>debtCount()>=DEBT_MAX},
@@ -727,6 +737,45 @@ function buyClient(cl){
   S.clients[cl.id] = true;
   toast("Signed " + cl.name + ".");
   renderHead(); renderList(); checkAchievements(); save();
+}
+
+/* ---------- incident mode ----------
+   Cookie Clicker's Grandmapocalypse. Entirely opt-in, escalating in
+   stages, and it makes the game both better and worse at once: more
+   income, faster debt, and escalations that turn hostile.
+
+   A hostile escalation inverts the normal deal. An ordinary one is a
+   bonus you may or may not catch; a hostile one is an incident that
+   punishes you for missing it. That is what the extra income is being
+   paid for -- it buys pressure, not just a bigger number.
+
+   Standing down is always free and immediate. The stage is the player's
+   to choose at any moment, so a run can be pushed hard and then backed
+   off before an exit rather than being locked in. */
+const INCIDENT_MAX  = 3;
+const INCIDENT_GAIN = 0.35;   // income per stage
+const BREACH_SECS   = 60;     // how long a missed incident hurts for
+const BREACH_MULT   = 0.5;
+const incidentGate = () => !!S.upgrades.siem;
+
+const incidentStage = () => Math.min(S.incident || 0, INCIDENT_MAX);
+const incidentMult  = () => 1 + INCIDENT_GAIN * incidentStage();
+// Chance any given escalation arrives hostile.
+const hostileChance = () => incidentStage() * 0.22;
+
+function escalateIncident(){
+  if(!incidentGate() || incidentStage() >= INCIDENT_MAX) return;
+  S.incident = incidentStage() + 1;
+  S.incidentPeak = Math.max(S.incidentPeak || 0, S.incident);
+  toast("Incident declared. Stage " + S.incident + ".");
+  renderHead(); renderList(true); checkAchievements(); save();
+}
+
+function standDown(){
+  if(!S.incident) return;
+  S.incident = 0;
+  toast("Stood down. Back to business as usual.");
+  renderHead(); renderList(true); save();
 }
 
 /* ---------- the contracts market ----------
@@ -870,7 +919,7 @@ function trainStaff(d){
 const DEBT_MAX    = 12;      // ceiling, so income cannot be strangled entirely
 const DEBT_DRAG   = 0.03;    // income lost per outstanding item
 const DEBT_YIELD  = 1.25;    // what the suppressed income is worth when paid off
-const DEBT_EVERY  = 150000;  // ms between new items
+const DEBT_EVERY  = 150000;  // ms between new items, before incident pressure
 const debtGate = () => S.staffTotal >= 25;
 
 const debtCount = () => Math.min(S.debt || 0, DEBT_MAX);
@@ -880,11 +929,13 @@ function debtTick(dt){
   if(!debtGate()) return;
   const now = Date.now();
   if(!S.nextDebt) S.nextDebt = now + DEBT_EVERY;
+  // An incident makes debt pile up faster, stage for stage.
+  const every = DEBT_EVERY / (1 + incidentStage());
   if(now >= S.nextDebt && (S.debt || 0) < DEBT_MAX){
     S.debt = (S.debt || 0) + 1;
-    S.nextDebt = now + DEBT_EVERY;
+    S.nextDebt = now + every;
   } else if(now >= S.nextDebt){
-    S.nextDebt = now + DEBT_EVERY;
+    S.nextDebt = now + every;
   }
   // Whatever the drag took this tick is banked at a premium rather than
   // simply lost -- that is what makes leaving it alone a real option.
@@ -962,7 +1013,12 @@ const ESCALATIONS = [
   {id:"warroom",  name:"War Room",        icon:"⌨️", weight:16, secs:13, clickMult:777,
    blurb:"Nobody is doing anything else. Clicks worth x777 for 13s."},
   {id:"invoice",  name:"Emergency Invoice",icon:"💸", weight:42,
-   blurb:"Billed at emergency rates, paid immediately."}
+   blurb:"Billed at emergency rates, paid immediately."},
+  // Never produced by the weighted picker (weight 0). This is the penalty
+  // a missed hostile escalation applies, and it lives in this list so it
+  // shares the same expiry, banner and save handling as every other effect.
+  {id:"breach",   name:"Breach",          icon:"☣️", weight:0, secs:BREACH_SECS, rateMult:BREACH_MULT,
+   blurb:"Nobody picked it up. Income halved while it is contained."}
 ];
 
 const ESC_LIFETIME_MS = 13000;              // how long one sits there before it is missed
@@ -1033,6 +1089,8 @@ let S = {
   repUp: {},                 // id -> true, reputation upgrades bought (permanent)
   mkt: {price:{}, inv:{}, entry:{}, at:0},   // contracts market: prices, positions, last move
   mktProfit: 0,              // realised profit from the market, all time
+  incident: 0,               // incident stage, 0-3, opt-in
+  incidentPeak: 0,           // highest stage ever declared
   lumps: 0,                  // training credits banked
   lumpAt: 0,                 // epoch ms the current credit started growing
   levels: {},                // staff id -> permanent training level
@@ -1106,7 +1164,7 @@ function rateOf(def){
 const baseRate  = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
 // What the game actually pays out: base production, times whatever
 // escalated tickets are currently running.
-const totalRate = () => baseRate() * buffMult("rateMult") * debtMult();
+const totalRate = () => baseRate() * buffMult("rateMult") * debtMult() * incidentMult();
 
 function clickValue(){
   let v = 1;
@@ -1258,7 +1316,7 @@ function listSignature(){
   if(tab === "prestige"){
     // Rebuild as the headline numbers move, but not every tick.
     return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000) +
-           "|" + Object.keys(S.repUp).length;
+           "|" + Object.keys(S.repUp).length + "|" + incidentStage();
   }
   if(tab === "awards"){
     return "a|" + Object.keys(S.ach).length;
@@ -1421,6 +1479,33 @@ function renderList(force){
       if(!got && afford) b.onclick = () => buyRepUpgrade(u);
       list.appendChild(b);
     });
+
+    // Incident mode sits at the bottom of the sell screen: it is the other
+    // lever that changes how a whole run plays, and it is opt-in.
+    if(incidentGate()){
+      const st = incidentStage();
+      const inc = document.createElement("div");
+      inc.className = "prestige-card inc-card";
+      inc.innerHTML =
+        '<div class="pc-h">Incident mode</div>' +
+        '<div class="pc-b">Declare a major incident. Every stage pays more and costs more: ' +
+        'debt piles up faster and escalated tickets start arriving hostile &mdash; catch one and it pays as ' +
+        'normal, miss one and income is halved for ' + BREACH_SECS + 's. Stand down at any time, for nothing.</div>' +
+        '<div class="pc-rows">' +
+          '<div class="pc-row"><span>Stage</span><b>' + st + ' of ' + INCIDENT_MAX + '</b></div>' +
+          '<div class="pc-row"><span>Income</span><b class="' + (st ? "pc-good" : "") + '">x' + incidentMult().toFixed(2) + '</b></div>' +
+          '<div class="pc-row"><span>Debt piles up</span><b>' + (1 + st) + 'x faster</b></div>' +
+          '<div class="pc-row"><span>Escalations hostile</span><b>' + Math.round(hostileChance() * 100) + '%</b></div>' +
+        '</div>' +
+        (st < INCIDENT_MAX
+          ? '<button class="btn btn-warn pc-go" id="incUp">Declare stage ' + (st + 1) + '</button>'
+          : '<div class="pc-lock">Fully escalated. There is nothing worse to declare.</div>') +
+        (st > 0 ? '<button class="btn pc-go" id="incDown">Stand down</button>' : '');
+      list.appendChild(inc);
+      const up = $("incUp"), down = $("incDown");
+      if(up) up.onclick = escalateIncident;
+      if(down) down.onclick = standDown;
+    }
     return;
   } else if(tab === "market"){
     const head = document.createElement("div");
@@ -1659,6 +1744,8 @@ function load(){
     S.mkt.entry[g.id] = (e > 0 && isFinite(e)) ? e : MKT_BASE;
   });
   S.mktProfit  = +d.mktProfit || 0;
+  S.incident   = Math.min(+d.incident || 0, INCIDENT_MAX);
+  S.incidentPeak = Math.min(+d.incidentPeak || 0, INCIDENT_MAX);
   S.lumps      = Math.min(+d.lumps || 0, LUMP_CAP);
   S.lumpAt     = +d.lumpAt || 0;
   S.levels     = (d.levels && typeof d.levels === "object") ? d.levels : {};
@@ -2242,30 +2329,40 @@ addEventListener("resize", ()=>{ hideTip(); coachSync(); });
 /* ---------- escalated tickets, on screen ----------
    The element is created and destroyed rather than hidden, so a missed
    escalation cannot leave a stale click target behind. */
-let escEl = null, escUntil = 0, escKind = null;
+let escEl = null, escUntil = 0, escKind = null, escHostile = false;
 
 function spawnEscalation(){
   if(escEl) return;
   escKind = pickEscalation();
+  // During an incident some of these arrive hostile: same reward for
+  // catching one, a real penalty for letting it time out.
+  escHostile = Math.random() < hostileChance();
   escUntil = Date.now() + ESC_LIFETIME_MS;
 
   const b = document.createElement("button");
-  b.className = "esc";
+  b.className = "esc" + (escHostile ? " esc-hostile" : "");
   b.type = "button";
-  b.setAttribute("aria-label", "Escalated ticket: " + escKind.name + ". " + escKind.blurb);
+  b.setAttribute("aria-label", (escHostile ? "Hostile incident: " : "Escalated ticket: ") + escKind.name + ". " +
+    escKind.blurb + (escHostile ? " Miss it and income is halved." : ""));
   b.innerHTML = escKind.icon + '<span class="esc-bar"><i></i></span>';
   // Keep it inside the viewport with room for its own size, and out of
   // the very top strip where the buff banner sits.
   b.style.left = Math.round(16 + Math.random() * Math.max(0, innerWidth  - 74 - 32)) + "px";
   b.style.top  = Math.round(56 + Math.random() * Math.max(0, innerHeight - 74 - 96)) + "px";
-  b.onclick = ()=>{ claimEscalation(escKind); despawnEscalation(); };
+  b.onclick = ()=>{ claimEscalation(escKind); despawnEscalation(false); };
   document.body.appendChild(b);
   escEl = b;
 }
 
-function despawnEscalation(){
+function despawnEscalation(missed){
+  // Only a hostile one that timed out unclaimed does any harm.
+  if(missed && escHostile){
+    const b = ESCALATIONS.find(e=>e.id === "breach");
+    S.buffs.breach = Date.now() + b.secs * 1000;
+    toast("Missed incident. Income halved for " + b.secs + "s.");
+  }
   if(escEl){ escEl.remove(); escEl = null; }
-  escKind = null;
+  escKind = null; escHostile = false;
   S.nextEsc = Date.now() + escInterval();
 }
 
@@ -2275,7 +2372,7 @@ function escTick(){
   if(!S.nextEsc) S.nextEsc = now + escInterval();
   if(escEl){
     const left = (escUntil - now) / ESC_LIFETIME_MS;
-    if(left <= 0){ despawnEscalation(); return; }
+    if(left <= 0){ despawnEscalation(true); return; }
     const bar = escEl.querySelector(".esc-bar i");
     if(bar) bar.style.transform = "scaleX(" + left.toFixed(3) + ")";
   } else if(now >= S.nextEsc){
