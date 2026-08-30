@@ -273,6 +273,18 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .debt-t{ font-size:13px; color:var(--ink); flex:1 1 auto }
 .debt-t b{ color:var(--crit); font-family:var(--mono) }
 .debt-t span{ display:block; font-size:11px; color:var(--dim); font-family:var(--mono) }
+/* Training budget strip. Same shape as the debt strip, opposite colour --
+   one is money you are losing, the other money you are being given. */
+.train{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(125,211,160,.08); border:1px solid rgba(125,211,160,.26);
+}
+.train .debt-t b{ color:var(--cash) }
+.train-go{ flex:0 0 auto; font-size:12px; padding:7px 12px; border-color:rgba(125,211,160,.4); color:var(--cash) }
+.train-go:hover{ background:rgba(125,211,160,.13) }
+.lvl{ color:var(--cash); font-family:var(--mono); font-size:11px }
+
 .debt-go{ flex:0 0 auto; font-size:12px; padding:7px 12px; border-color:rgba(248,113,113,.45); color:var(--crit) }
 .debt-go:hover{ background:rgba(248,113,113,.14) }
 
@@ -470,6 +482,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <div class="stat"><div class="stat-k">Reputation</div><div class="stat-v" id="sRep" style="color:var(--warn)">0</div></div>
     </div>
 
+    <div class="train" id="train" style="display:none">
+      <div class="debt-t">
+        <b id="trainN">0</b> training credits
+        <span id="trainEta">next in 6h</span>
+      </div>
+      <button class="btn train-go" id="trainGo" type="button">Spend</button>
+    </div>
+
     <div class="debt" id="debt" style="display:none">
       <div class="debt-t">
         <b id="debtN">0</b> technical debt
@@ -593,6 +613,8 @@ const ACHIEVEMENTS = [
   {id:"caught",       name:"Caught It",           icon:"🔥", desc:"Claim an escalated ticket.",            check:()=>(S.escCaught||0)>=1},
   {id:"responder",    name:"First Responder",     icon:"🚨", desc:"Claim 50 escalated tickets.",           check:()=>(S.escCaught||0)>=50},
   {id:"paidoff",      name:"Paid It Down",        icon:"🧹", desc:"Pay down technical debt.",              check:()=>(S.remediated||0)>=1},
+  {id:"trained",      name:"Certified",           icon:"📜", desc:"Spend a training credit.",              check:()=>STAFF.some(d=>levelOf(d.id)>0)},
+  {id:"maxtrained",   name:"Fully Certified",     icon:"🎖️", desc:"Take a staff tier to training level 10.", check:()=>STAFF.some(d=>levelOf(d.id)>=LEVEL_MAX)},
   {id:"maxdebt",      name:"Deferred Maintenance",icon:"🕳️", desc:"Let technical debt reach its ceiling.",  check:()=>debtCount()>=DEBT_MAX},
   {id:"first-exit",   name:"Sold",                icon:"🤝", desc:"Sell the company for the first time.",  check:()=>S.exits>=1},
   {id:"serial",       name:"Serial Entrepreneur", icon:"🔁", desc:"Sell the company 5 times.",             check:()=>S.exits>=5},
@@ -684,6 +706,54 @@ function buyClient(cl){
   S.clients[cl.id] = true;
   toast("Signed " + cl.name + ".");
   renderHead(); renderList(); checkAchievements(); save();
+}
+
+/* ---------- training budget ----------
+   Cookie Clicker's sugar lumps. A currency that grows on a wall clock
+   rather than from play, so there is a reason to come back tomorrow that
+   has nothing to do with how long you sat here today. Spent on permanent
+   levels for a staff tier, which survive prestige -- the only thing
+   besides clients and reputation upgrades that does.
+
+   Accrual is computed from a timestamp rather than counted up by the
+   loop, so it keeps running with the tab closed and cannot be farmed by
+   leaving the game open. */
+const LUMP_MS   = 6 * 3600 * 1000;   // one credit per six hours
+const LUMP_CAP  = 20;                // stops an untouched save banking forever
+const LEVEL_MAX = 10;
+const LEVEL_STEP = 0.10;             // +10% output per level, for that tier
+const lumpGate = () => S.exits >= 1;
+
+const levelOf = id => S.levels[id] || 0;
+const levelMult = id => 1 + LEVEL_STEP * levelOf(id);
+const levelCost = id => levelOf(id) + 1;
+
+function lumpTick(){
+  if(!lumpGate()) return;
+  const now = Date.now();
+  if(!S.lumpAt){ S.lumpAt = now; return; }
+  while(now - S.lumpAt >= LUMP_MS && S.lumps < LUMP_CAP){
+    S.lumps++; S.lumpAt += LUMP_MS;
+  }
+  // At the cap the clock parks rather than banking a backlog to be
+  // dumped the moment one credit is spent.
+  if(S.lumps >= LUMP_CAP) S.lumpAt = now;
+}
+
+function lumpEta(){
+  if(S.lumps >= LUMP_CAP) return "at cap";
+  const left = Math.max(0, LUMP_MS - (Date.now() - (S.lumpAt || Date.now())));
+  const h = Math.floor(left / 3600000), m = Math.floor(left % 3600000 / 60000);
+  return h > 0 ? h + "h " + m + "m" : m + "m";
+}
+
+function trainStaff(d){
+  const cost = levelCost(d.id);
+  if(levelOf(d.id) >= LEVEL_MAX || S.lumps < cost) return;
+  S.lumps -= cost;
+  S.levels[d.id] = levelOf(d.id) + 1;
+  toast(d.name + " trained to level " + S.levels[d.id] + ".");
+  renderHead(); renderList(true); checkAchievements(); save();
 }
 
 /* ---------- technical debt ----------
@@ -859,6 +929,9 @@ let S = {
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
   repUp: {},                 // id -> true, reputation upgrades bought (permanent)
+  lumps: 0,                  // training credits banked
+  lumpAt: 0,                 // epoch ms the current credit started growing
+  levels: {},                // staff id -> permanent training level
   debt: 0,                   // outstanding technical debt items
   debtBank: 0,               // cash the drag has held back, paid out on remediation
   nextDebt: 0,               // epoch ms the next debt item lands
@@ -924,7 +997,7 @@ function rateOf(def){
     if(u.kind === "staff"  && u.target === def.id) r *= u.mult;
     if(u.kind === "global") r *= u.mult;
   });
-  return r * repMult();
+  return r * levelMult(def.id) * repMult();
 }
 const baseRate  = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
 // What the game actually pays out: base production, times whatever
@@ -989,6 +1062,15 @@ function renderHead(){
   $("sStaff").textContent = fmt(S.staffTotal);
   $("sLife").textContent = money(S.lifetime);
   $("sRep").textContent = fmt(S.reputation);
+
+  const trainBox = $("train");
+  if(trainBox){
+    trainBox.style.display = lumpGate() ? "flex" : "none";
+    if(lumpGate()){
+      $("trainN").textContent = S.lumps;
+      $("trainEta").textContent = S.lumps >= LUMP_CAP ? "at cap" : "next in " + lumpEta();
+    }
+  }
 
   const debtBox = $("debt");
   if(debtBox){
@@ -1062,6 +1144,9 @@ function listSignature(){
   }
   if(tab === "awards"){
     return "a|" + Object.keys(S.ach).length;
+  }
+  if(tab === "training"){
+    return "t|" + S.lumps + "|" + STAFF.map(d=>levelOf(d.id)).join(",");
   }
   if(tab === "clients"){
     // Affordability moves with reputation, so this has to be sensitive
@@ -1211,6 +1296,33 @@ function renderList(force){
         '<div class="item-r"><div class="item-c' + (got ? " ach-got" : afford ? "" : " cant") + '">' +
           (got ? "owned" : fmt(u.cost) + " rep") + '</div></div>';
       if(!got && afford) b.onclick = () => buyRepUpgrade(u);
+      list.appendChild(b);
+    });
+    return;
+  } else if(tab === "training"){
+    // Reached from the training strip rather than a tab of its own -- the
+    // tab bar is already full, and this is only interesting while there
+    // are credits to spend.
+    const head = document.createElement("div");
+    head.className = "rep-head";
+    head.innerHTML = "Train a staff tier" +
+      '<span class="rep-bal">' + S.lumps + ' credit' + (S.lumps === 1 ? "" : "s") + '</span>';
+    list.appendChild(head);
+
+    STAFF.forEach(d=>{
+      const lv = levelOf(d.id), cost = levelCost(d.id);
+      const maxed = lv >= LEVEL_MAX, afford = S.lumps >= cost;
+      const b = document.createElement("button");
+      b.className = "item";
+      b.disabled = maxed || !afford;
+      b.innerHTML =
+        '<div class="item-ic">' + d.icon + '</div>' +
+        '<div><div class="item-n">' + d.name + ' <span class="lvl">Lv ' + lv + '</span></div>' +
+        '<div class="item-m">Output ' + Math.round(levelMult(d.id) * 100) + '% &rarr; ' +
+          (maxed ? "maxed" : Math.round((1 + LEVEL_STEP * (lv + 1)) * 100) + "%") + '</div></div>' +
+        '<div class="item-r"><div class="item-c' + (maxed ? " ach-got" : afford ? "" : " cant") + '">' +
+          (maxed ? "max" : cost + " credit" + (cost === 1 ? "" : "s")) + '</div></div>';
+      if(!maxed && afford) b.onclick = () => trainStaff(d);
       list.appendChild(b);
     });
     return;
@@ -1382,6 +1494,9 @@ function load(){
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
   S.repUp      = (d.repUp && typeof d.repUp === "object") ? d.repUp : {};
+  S.lumps      = Math.min(+d.lumps || 0, LUMP_CAP);
+  S.lumpAt     = +d.lumpAt || 0;
+  S.levels     = (d.levels && typeof d.levels === "object") ? d.levels : {};
   S.debt       = Math.min(+d.debt || 0, DEBT_MAX);
   S.debtBank   = +d.debtBank || 0;
   S.nextDebt   = +d.nextDebt || 0;
@@ -1405,6 +1520,7 @@ function load(){
   Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
   Object.keys(S.clients).forEach(k=>{ if(!CLIENTS.some(cl=>cl.id===k)) delete S.clients[k]; });
   Object.keys(S.ach).forEach(k=>{ if(!ACHIEVEMENTS.some(a=>a.id===k)) delete S.ach[k]; });
+  Object.keys(S.levels).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.levels[k]; });
   Object.keys(S.repUp).forEach(k=>{ if(!REP_UPGRADES.some(u=>u.id===k)) delete S.repUp[k]; });
 
   // Saves from before reputation was split into earned and held carry no
@@ -2034,6 +2150,7 @@ setInterval(()=>{
   // Cheap: it returns immediately once the tour is done, and only touches
   // the DOM when the step actually changes.
   coachSync();
+  lumpTick();
   debtTick(dt);
   escTick();
   renderBuffs();
@@ -2043,6 +2160,7 @@ setInterval(()=>{
 }, TICK_MS);
 
 $("debtGo").onclick = remediate;
+$("trainGo").onclick = ()=>{ tab = "training"; renderList(true); };
 
 setInterval(save, 20000);
 
