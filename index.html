@@ -232,7 +232,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .stat-k{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;color:var(--faint)}
 .stat-v{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
 
-/* ---------- prestige (lives in the store as the Exit tab) ---------- */
+/* ---------- prestige (lives in the store as the Sell tab) ---------- */
 .prestige-card{
   background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--warn);
   border-radius:10px;padding:16px 17px;display:flex;flex-direction:column;gap:12px;
@@ -424,9 +424,9 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     <div class="tabs">
       <button class="tab on" data-tab="staff">Staff</button>
       <button class="tab" data-tab="upgrades">Upgrades <span class="badge" id="upBadge" style="display:none">0</span></button>
-      <button class="tab" data-tab="prestige">Exit <span class="badge" id="prBadge" style="display:none">!</span></button>
+      <button class="tab" data-tab="prestige">Sell <span class="badge" id="prBadge" style="display:none">!</span></button>
       <button class="tab" data-tab="clients">Clients <span class="badge" id="clBadge" style="display:none">0</span></button>
-      <button class="tab" data-tab="awards">Awards <span class="badge" id="awBadge" style="display:none">0</span></button>
+      <button class="tab" data-tab="awards">Achievements <span class="badge" id="awBadge" style="display:none">0</span></button>
     </div>
     <div class="list" id="list"></div>
     <div class="bar">
@@ -732,7 +732,7 @@ function renderHead(){
   $("sLife").textContent = money(S.lifetime);
   $("sRep").textContent = fmt(S.reputation);
 
-  // The Exit tab flags itself when an exit is actually available.
+  // The Sell tab flags itself when an exit is actually available.
   const prBadge = $("prBadge");
   prBadge.style.display = pendingRep() > 0 ? "inline-block" : "none";
 
@@ -1537,7 +1537,7 @@ const TOUR = [
   },
   {
     k:"last step", h:"Then sell it all",
-    b:"Cash and staff reset; reputation is permanent and makes every future run faster. Growing a business, selling it, and growing the next one quicker is the long game.<br><br><b>Open the Exit tab and sell when you are ready.</b>",
+    b:"Cash and staff reset; reputation is permanent and makes every future run faster. Growing a business, selling it, and growing the next one quicker is the long game.<br><br><b>Open the Sell tab and sell when you are ready.</b>",
     at:()=>document.querySelector('.tab[data-tab="prestige"]'), side:"left",
     when:()=>pendingRep() > 0,
     done:()=>S.reputation > 0
