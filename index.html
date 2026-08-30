@@ -290,6 +290,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .btn:disabled{background:var(--panel2);color:var(--faint);cursor:not-allowed}
 .btn-warn{background:var(--warn);color:#3A2A05}
 
+/* Header above the reputation shop inside the Sell tab. */
+.rep-head{
+  display:flex; align-items:baseline; justify-content:space-between;
+  margin:18px 2px 8px; font-size:12px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--dim);
+}
+.rep-bal{ color:var(--warn); letter-spacing:.04em }
+
 /* ---------- store ---------- */
 .store{background:var(--bg2);border-left:1px solid var(--line);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
 /* On a phone the store became a second screenful below the ticket, so the
@@ -655,6 +663,48 @@ function buyClient(cl){
   renderHead(); renderList(); checkAchievements(); save();
 }
 
+/* ---------- reputation upgrades ----------
+   Cookie Clicker's heavenly upgrades. Bought with reputation, kept
+   forever, and the only thing reputation is ever spent on -- which is
+   why clients were moved off it. Every one of these changes the terms of
+   the *next* run rather than the current one, so selling the company
+   stops being a multiplier bump and starts being the thing that unlocks
+   how the game is played.
+
+   Held reputation still pays its passive bonus, so spending is a real
+   choice: repMult() reads S.reputation, and these come out of it. */
+const REP_UPGRADES = [
+  {id:"headstart", name:"Head Start",        icon:"🚀", cost:3,   blurb:"Every new run begins with $10,000 in the bank."},
+  {id:"handover",  name:"Warm Handover",     icon:"🤝", cost:8,   blurb:"Every new run begins with 10 Help Desk Techs already hired."},
+  {id:"pager",     name:"Louder Pager",      icon:"📟", cost:15,  blurb:"Escalated tickets surface twice as often."},
+  {id:"rolodex",   name:"The Rolodex",       icon:"📇", cost:30,  blurb:"Reputation is worth +3% each instead of +2%."},
+  {id:"retainer",  name:"Standing Retainer", icon:"📎", cost:50,  blurb:"Escalation effects last half again as long."},
+  {id:"nightshift",name:"Night Shift",       icon:"🌜", cost:80,  blurb:"Away earnings count for 24 hours instead of 8."},
+  {id:"goodwill",  name:"Goodwill",          icon:"💠", cost:140, blurb:"Every exit is worth 25% more reputation."},
+  {id:"franchise", name:"Franchise Model",   icon:"🏬", cost:240, blurb:"Every new run begins with one of every staff tier."}
+];
+
+const hasRep = id => !!S.repUp[id];
+
+function buyRepUpgrade(u){
+  if(hasRep(u.id) || S.reputation < u.cost) return;
+  S.reputation -= u.cost;
+  S.repUp[u.id] = true;
+  toast("Bought " + u.name + ".");
+  renderHead(); renderList(true); checkAchievements(); save();
+}
+
+/* Everything a run is handed the moment it starts. Called from prestige()
+   only: a brand-new player owns none of these, and calling it on load
+   would hand out the same head start on every refresh. */
+function applyRunStart(){
+  if(hasRep("headstart")) S.cash += 10000;
+  if(hasRep("handover")){ S.staff.helpdesk = (S.staff.helpdesk || 0) + 10; S.staffTotal += 10; }
+  if(hasRep("franchise")) STAFF.forEach(d=>{
+    if(!S.staff[d.id]){ S.staff[d.id] = 1; S.staffTotal += 1; }
+  });
+}
+
 /* ---------- escalated tickets ----------
    Cookie Clicker's golden cookie, in MSP clothing. A P1 surfaces at a
    random spot every few minutes, sits there for a few seconds, and pays
@@ -678,7 +728,10 @@ const ESC_LIFETIME_MS = 13000;              // how long one sits there before it
 const ESC_MIN_MS = 90000, ESC_MAX_MS = 210000;   // gap between spawns
 const escGate = () => S.clicks >= 30;       // not during the opening tutorial beats
 
-function escInterval(){ return ESC_MIN_MS + Math.random() * (ESC_MAX_MS - ESC_MIN_MS); }
+function escInterval(){
+  const gap = ESC_MIN_MS + Math.random() * (ESC_MAX_MS - ESC_MIN_MS);
+  return hasRep("pager") ? gap / 2 : gap;
+}
 
 function pickEscalation(){
   const total = ESCALATIONS.reduce((s,e)=>s + e.weight, 0);
@@ -705,8 +758,9 @@ function claimEscalation(e){
     earn(v);
     toast("Emergency Invoice paid: " + money(v));
   } else {
-    S.buffs[e.id] = Date.now() + e.secs * 1000;
-    toast(e.name + " for " + e.secs + "s.");
+    const secs = Math.round(e.secs * (hasRep("retainer") ? 1.5 : 1));
+    S.buffs[e.id] = Date.now() + secs * 1000;
+    toast(e.name + " for " + secs + "s.");
   }
   S.escCaught = (S.escCaught || 0) + 1;
   renderHead(); renderList(); checkAchievements(); save();
@@ -735,6 +789,7 @@ let S = {
   repEarned: 0,
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
+  repUp: {},                 // id -> true, reputation upgrades bought (permanent)
   buffs: {},                 // escalation id -> epoch ms the effect ends
   nextEsc: 0,                // epoch ms the next escalated ticket surfaces
   escCaught: 0,              // escalated tickets claimed, all time
@@ -785,7 +840,8 @@ function costOf(def){
   // Cookie Clicker's proven curve: each copy costs 15% more than the last.
   return Math.ceil(def.cost * Math.pow(1.15, c(def.id)));
 }
-function repMult(){ return 1 + S.reputation * 0.02; }   // +2% per reputation
+// +2% per point held, or +3% once The Rolodex is bought.
+function repMult(){ return 1 + S.reputation * (hasRep("rolodex") ? 0.03 : 0.02); }
 
 function rateOf(def){
   let r = def.rate * c(def.id);
@@ -817,7 +873,11 @@ function pendingRep(){
   // Clamped: a save that banked reputation under the old refunding formula
   // can be owed less than nothing, and simply earns none until lifetime
   // revenue catches up rather than having anything taken back.
-  return Math.max(0, Math.floor(Math.sqrt(S.lifetime / PRESTIGE_MIN)) - S.repEarned);
+  // Goodwill lifts the ceiling rather than the single payout: raising the
+  // payout alone would only pay the same total sooner, because repEarned
+  // grows by whatever was paid.
+  const cap = Math.sqrt(S.lifetime / PRESTIGE_MIN) * (hasRep("goodwill") ? 1.25 : 1);
+  return Math.max(0, Math.floor(cap) - S.repEarned);
 }
 
 /* ---------- rendering ---------- */
@@ -912,7 +972,8 @@ function listSignature(){
   }
   if(tab === "prestige"){
     // Rebuild as the headline numbers move, but not every tick.
-    return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000);
+    return "p|" + pendingRep() + "|" + S.reputation + "|" + Math.floor(S.lifetime / 1000) +
+           "|" + Object.keys(S.repUp).length;
   }
   if(tab === "awards"){
     return "a|" + Object.keys(S.ach).length;
@@ -1041,6 +1102,32 @@ function renderList(force){
     list.appendChild(box);
     const go = $("prestigeBtn");
     if(go) go.onclick = prestige;
+
+    // The reputation shop lives under the sell card rather than in a tab
+    // of its own: it is the only thing reputation buys, and this is the
+    // screen where reputation is on the player's mind.
+    const head = document.createElement("div");
+    head.className = "rep-head";
+    head.innerHTML = "What reputation buys" +
+      '<span class="rep-bal">' + fmt(S.reputation) + ' held</span>';
+    list.appendChild(head);
+
+    REP_UPGRADES.forEach(u=>{
+      const got = hasRep(u.id), afford = S.reputation >= u.cost;
+      const b = document.createElement("button");
+      b.className = "item";
+      b.dataset.kind = "rep";
+      b.dataset.id = u.id;
+      b.disabled = got || !afford;
+      b.innerHTML =
+        '<div class="item-ic">' + u.icon + '</div>' +
+        '<div><div class="item-n">' + u.name + '</div>' +
+        '<div class="item-m">' + u.blurb + '</div></div>' +
+        '<div class="item-r"><div class="item-c' + (got ? " ach-got" : afford ? "" : " cant") + '">' +
+          (got ? "owned" : fmt(u.cost) + " rep") + '</div></div>';
+      if(!got && afford) b.onclick = () => buyRepUpgrade(u);
+      list.appendChild(b);
+    });
     return;
   } else if(tab === "clients"){
     CLIENTS.forEach((cl,i)=>{
@@ -1177,6 +1264,8 @@ function prestige(){
   S.exits += 1;
   S.cash = 0; S.staff = {}; S.staffTotal = 0; S.upgrades = {};
   // lifetime deliberately persists: it is the record of everything ever built.
+  // Whatever the reputation upgrades hand the next run, they hand it now.
+  applyRunStart();
   toast("Acquired. +" + fmt(p) + " reputation.");
   renderHead(); renderList(); checkAchievements(); save();
 }
@@ -1207,6 +1296,7 @@ function load(){
   S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
+  S.repUp      = (d.repUp && typeof d.repUp === "object") ? d.repUp : {};
   // Buffs are end timestamps, so anything that expired while away is
   // simply dropped rather than resuming with time left on it.
   S.buffs      = {};
@@ -1226,6 +1316,7 @@ function load(){
   Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
   Object.keys(S.clients).forEach(k=>{ if(!CLIENTS.some(cl=>cl.id===k)) delete S.clients[k]; });
   Object.keys(S.ach).forEach(k=>{ if(!ACHIEVEMENTS.some(a=>a.id===k)) delete S.ach[k]; });
+  Object.keys(S.repUp).forEach(k=>{ if(!REP_UPGRADES.some(u=>u.id===k)) delete S.repUp[k]; });
 
   // Saves from before reputation was split into earned and held carry no
   // repEarned. Rebuild it rather than guess: signing a client is the only
@@ -1240,7 +1331,7 @@ function load(){
   S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
 
   // Offline earnings, capped at 8h so leaving it a month isn't a free win.
-  const away = Math.min((Date.now() - S.lastSeen) / 1000, 8*3600);
+  const away = Math.min((Date.now() - S.lastSeen) / 1000, (hasRep("nightshift") ? 24 : 8)*3600);
   if(away > 60){
     const gained = totalRate() * away;
     if(gained > 0){
@@ -1598,6 +1689,13 @@ function showTip(el){
   } else if(kind === "client"){
     const cl = CLIENTS.find(x=>x.id===id); if(!cl) return;
     html = clientTip(cl, !el.classList.contains("locked"));
+  } else if(kind === "rep"){
+    const u = REP_UPGRADES.find(x=>x.id===id); if(!u) return;
+    html = '<div class="tip-n">' + u.name + '</div>' +
+      '<div class="tip-f">permanent -- survives every future exit</div>' +
+      '<div class="tip-r"><span>Costs</span><b class="' + (S.reputation >= u.cost ? "good" : "warn") + '">' + fmt(u.cost) + ' reputation</b></div>' +
+      '<div class="tip-r"><span>You hold</span><b>' + fmt(S.reputation) + '</b></div>' +
+      '<div class="tip-note">' + u.blurb + ' Reputation spent here stops counting toward your passive bonus.</div>';
   } else {
     const u = UPGRADES.find(x=>x.id===id); if(!u) return;
     html = upgradeTip(u);
