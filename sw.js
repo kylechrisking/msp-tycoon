@@ -6,7 +6,7 @@
 // Bump CACHE when publishing a build worth forcing offline players onto
 // sooner. Low-stakes either way: the fetch handler below is network-first,
 // so anyone online always gets the current file regardless of this name.
-const CACHE = "msp-tycoon-v1";
+const CACHE = "msp-tycoon-v2";
 const CORE = ["./", "./index.html"];
 
 self.addEventListener("install", e => {
