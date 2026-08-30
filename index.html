@@ -535,9 +535,13 @@ const ACHIEVEMENTS = [
   {id:"repeat",       name:"Repeat Offender",     icon:"♻️", desc:"Sell the company 10 times.",            check:()=>S.exits>=10},
   {id:"first-client", name:"First Contract",      icon:"📝", desc:"Sign your first client.",               check:()=>CLIENTS.some(cl=>S.clients[cl.id])},
   {id:"book",         name:"Book of Business",    icon:"📒", desc:"Sign every client.",                    check:()=>CLIENTS.every(cl=>S.clients[cl.id])},
-  {id:"reputable",    name:"Reputable",           icon:"⭐", desc:"Reach 50 reputation.",                  check:()=>S.reputation>=50},
-  {id:"legend",       name:"Industry Legend",     icon:"🏆", desc:"Reach 200 reputation.",                 check:()=>S.reputation>=200},
-  {id:"household",    name:"Household Name",      icon:"📣", desc:"Reach 500 reputation.",                 check:()=>S.reputation>=500},
+  // Against reputation ever earned, not the balance still held: now that
+  // signing a client spends reputation for good, a player with a full
+  // roster could never reach these on held balance alone. A career total
+  // is also the plainer reading of "reach 200 reputation".
+  {id:"reputable",    name:"Reputable",           icon:"⭐", desc:"Earn 50 reputation.",                   check:()=>S.repEarned>=50},
+  {id:"legend",       name:"Industry Legend",     icon:"🏆", desc:"Earn 200 reputation.",                  check:()=>S.repEarned>=200},
+  {id:"household",    name:"Household Name",      icon:"📣", desc:"Earn 500 reputation.",                  check:()=>S.repEarned>=500},
 ];
 
 function checkAchievements(){
@@ -602,7 +606,14 @@ let S = {
   staff: {},                 // id -> count
   staffTotal: 0,
   upgrades: {},              // id -> true
-  reputation: 0,             // permanent prestige currency
+  reputation: 0,             // prestige currency currently held -- drives repMult()
+  /* Reputation ever claimed, which only ever goes up. Kept apart from the
+     held balance because an exit has to pay out against what you have
+     already been given, not against what you still have. Sharing one
+     number made spending reputation free: pendingRep() subtracted the
+     held balance, so signing a client lowered it and the next exit handed
+     the same points straight back for no extra revenue. */
+  repEarned: 0,
   exits: 0,                  // times the company has been sold
   ach: {},                   // id -> true, achievements unlocked
   clients: {},               // id -> true, signed clients (survive prestige)
@@ -677,7 +688,11 @@ function clickValue(){
 
 function pendingRep(){
   if(S.lifetime < PRESTIGE_MIN) return 0;
-  return Math.floor(Math.sqrt(S.lifetime / PRESTIGE_MIN)) - S.reputation;
+  // Against what has been claimed, not what is still held -- see repEarned.
+  // Clamped: a save that banked reputation under the old refunding formula
+  // can be owed less than nothing, and simply earns none until lifetime
+  // revenue catches up rather than having anything taken back.
+  return Math.max(0, Math.floor(Math.sqrt(S.lifetime / PRESTIGE_MIN)) - S.repEarned);
 }
 
 /* ---------- rendering ---------- */
@@ -886,6 +901,11 @@ function renderList(force){
       'Cash, staff and upgrades reset. Reputation is permanent and applies to every future run.</div>' +
       '<div class="pc-rows">' +
         '<div class="pc-row"><span>Reputation held</span><b>' + fmt(S.reputation) + '</b></div>' +
+        // Only worth a row once the two numbers have actually diverged --
+        // otherwise it reads as a spare zero on every clean save.
+        (S.repEarned > S.reputation
+          ? '<div class="pc-row"><span>Signed to clients</span><b>' + fmt(S.repEarned - S.reputation) + '</b></div>'
+          : '') +
         '<div class="pc-row"><span>Current bonus</span><b>+' + (S.reputation*2) + '%</b></div>' +
         '<div class="pc-row"><span>Lifetime revenue</span><b>' + money(S.lifetime) + '</b></div>' +
         '<div class="pc-row"><span>Exit is worth</span><b class="' + (p>0?"pc-good":"") + '">' + fmt(p) + ' rep</b></div>' +
@@ -1032,6 +1052,7 @@ function prestige(){
   if(p <= 0) return;
   if(!confirm("Sell the company for " + fmt(p) + " reputation?\n\nCash, staff and upgrades reset. Reputation is permanent.")) return;
   S.reputation += p;
+  S.repEarned += p;
   S.exits += 1;
   S.cash = 0; S.staff = {}; S.staffTotal = 0; S.upgrades = {};
   // lifetime deliberately persists: it is the record of everything ever built.
@@ -1060,6 +1081,7 @@ function load(){
   S.lifetime   = +d.lifetime   || 0;
   S.clicks     = +d.clicks     || 0;
   S.reputation = +d.reputation || 0;
+  S.repEarned  = +d.repEarned  || 0;
   S.exits      = +d.exits      || 0;
   S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
@@ -1075,6 +1097,16 @@ function load(){
   Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
   Object.keys(S.clients).forEach(k=>{ if(!CLIENTS.some(cl=>cl.id===k)) delete S.clients[k]; });
   Object.keys(S.ach).forEach(k=>{ if(!ACHIEVEMENTS.some(a=>a.id===k)) delete S.ach[k]; });
+
+  // Saves from before reputation was split into earned and held carry no
+  // repEarned. Rebuild it rather than guess: signing a client is the only
+  // thing that has ever spent reputation, so everything ever claimed is
+  // what is still held plus the price of every client already signed. That
+  // reads the costs out of CLIENTS, which is static config -- the save
+  // never stored them, so this stays correct even after a repricing.
+  if(d.repEarned === undefined){
+    S.repEarned = S.reputation + CLIENTS.reduce((s,cl)=> s + (S.clients[cl.id] ? cl.cost : 0), 0);
+  }
 
   S.staffTotal = STAFF.reduce((n,d2)=>n + c(d2.id), 0);
 
@@ -1411,7 +1443,7 @@ function clientTip(cl, unlocked){
     (signed
       ? '<div class="tip-r"><span>Status</span><b class="good">signed</b></div>'
       : '<div class="tip-r"><span>Costs</span><b class="' + (S.reputation >= cl.cost ? "good" : "warn") + '">' + fmt(cl.cost) + ' reputation</b></div>') +
-    '<div class="tip-note">' + cl.blurb + (signed ? "" : " Reputation spent here is gone from your passive +2%-per-point bonus too, until you earn more.") + '</div>';
+    '<div class="tip-note">' + cl.blurb + (signed ? "" : " Reputation spent here is spent for good: it stops counting toward your +2%-per-point bonus, and an exit will not pay it back.") + '</div>';
 }
 
 function placeTip(el){

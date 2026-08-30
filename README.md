@@ -43,7 +43,10 @@ staff; staff close tickets while you are away.
 - **A client roster survives every exit.** Twelve named clients, signed
   once with reputation, each adding a flat, permanent $/s that staff and
   upgrades resetting can't touch — from a two-chair dental office up to a
-  defence contractor that will ask about your CMMC level.
+  defence contractor that will ask about your CMMC level. Reputation
+  spent signing one is spent for good: it stops counting toward the
+  passive +2%-per-point bonus and no exit pays it back, so the roster is
+  a real tradeoff rather than a second currency.
 - **Twenty-five achievements**, on their own tab, from closing your first
   ticket up through ten exits and 500 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
@@ -72,7 +75,7 @@ directly on the row.
 
 ## Design rules
 
-Three constraints, each one a bug the previous build actually shipped:
+Four constraints, each one a bug that actually shipped:
 
 1. **One interval owns the simulation.** The old build ran two, and the
    second corrupted the score every tick — it read `this.totalPassiveProd`
@@ -86,8 +89,21 @@ Three constraints, each one a bug the previous build actually shipped:
    ids dropped. The old save embedded balance numbers, which pinned the
    economy to whatever it was when the file was written.
 
+4. **A spendable currency needs two numbers.** Reputation earned and
+   reputation held are separate fields. Sharing one made spending free:
+   `pendingRep()` paid out `floor(sqrt(lifetime / 1e6)) - reputation`, so
+   signing a client lowered the subtrahend and the next exit returned the
+   same points at no extra revenue. Payouts settle against what has been
+   claimed; only the held balance moves when you spend.
+
 The practical upshot of (3): staff, upgrades and pricing can be changed
-freely without invalidating anyone's save.
+freely without invalidating anyone's save. Saves from before (4) carry no
+`repEarned` and don't need one — signing a client is the only thing that
+has ever spent reputation, so the career total is rebuilt on load as the
+held balance plus the price of every client already signed, read out of
+static config. A save that milked the old refund can end up owed less
+than nothing; the payout floors at zero, so it earns none until lifetime
+revenue catches up rather than having anything clawed back.
 
 ## Status
 
@@ -95,15 +111,17 @@ Playable, being tuned. Balance numbers are provisional.
 
 Known gaps:
 
-- **Reputation spent on a client comes back.** `pendingRep()` is
-  `floor(sqrt(lifetime / 1e6)) - reputation`, so spending reputation
-  lowers the subtrahend and the next exit hands the same points straight
-  back at no extra revenue. Signing a client is therefore a loan against
-  your next exit, not the tradeoff against the passive +2% bonus it was
-  written to be. Fixing it means either tracking reputation ever earned
-  separately from reputation held, or pricing clients in something else
-  — both change prestige maths for existing saves, so it is a deliberate
-  decision rather than a patch.
+- **Client prices were set when spending was free, and now it isn't.**
+  Under the refund bug every client was pure upside, so the roster was
+  priced as a sequence of unlocks rather than as a real cost. Now that
+  reputation spent is gone, the top of the roster looks like a bad buy: a
+  flat rate can't keep up with a multiplier the way the prices assume.
+  Meridian Aerospace wants 4,000 reputation for +$160K/s, but holding
+  those 4,000 points instead is +8,000% on everything you own — worth far
+  more than $160K/s by the time you can afford either. The early roster
+  is fine, where a few points of bonus are worth nothing and a flat $5/s
+  is transformative. Somewhere in the middle it inverts. Finding where
+  needs the full-loop simulation run again, not a guess at new numbers.
 - Selling the company unlocks nothing. `S.exits` gates two achievements
   and nothing else, so exit #2 is the same run as exit #1 with a better
   multiplier. The prestige loop has no new content to pull a player
