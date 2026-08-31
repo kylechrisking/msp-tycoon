@@ -244,8 +244,32 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 }
 
 /* ---------- shell ---------- */
-.app{display:grid;grid-template-columns:minmax(0,1fr) 384px;min-height:100vh}
-@media(max-width:900px){.app{grid-template-columns:1fr}}
+/* Three columns, Cookie Clicker's shape: what you click on the left, what
+   you own in the middle, what you can buy on the right. Named areas rather
+   than column counts, so the middle can drop under the left at medium
+   widths without any of the three changing what it contains. */
+.app{
+  display:grid;
+  grid-template-columns:360px minmax(0,1fr) 384px;
+  grid-template-areas:"main sheet store";
+  min-height:100vh;
+}
+.main{grid-area:main}
+.sheet{grid-area:sheet}
+.store{grid-area:store}
+
+/* Not enough room for three: the sheet tucks under the click column and the
+   store keeps its own full-height column. */
+@media(max-width:1199px){
+  .app{
+    grid-template-columns:minmax(0,1fr) 384px;
+    grid-template-areas:"main store" "sheet store";
+    align-content:start;
+  }
+}
+@media(max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-areas:"main" "sheet" "store"}
+}
 /* The rest of the phone layout lives at the end of this stylesheet, after
    the rules it needs to override. */
 
@@ -258,6 +282,58 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 }
 .brand-name{font-weight:600;font-size:17px;letter-spacing:-.01em}
 .brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
+
+/* ---------- the company sheet (middle column) ---------- */
+.sheet{padding:22px 20px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+.sh-sec{min-width:0}
+.sh-h{
+  display:flex;align-items:baseline;gap:8px;margin-bottom:9px;
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;
+  /* --dim rather than --faint: on a phone the ambient floor canvas scrolls
+     behind this column, and a faint header disappeared into the skyline.
+     The rows and chips have solid panels, so only the headers needed it. */
+  text-transform:uppercase;color:var(--dim);
+}
+.sh-h b{color:var(--accent);font-weight:600;letter-spacing:.04em}
+
+/* One row per staff tier owned. The repeated icons are the point: the row
+   gets visibly heavier as you hire, which a number alone never does. */
+.sh-row{
+  display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;
+  padding:9px 11px;border-radius:10px;background:var(--panel);
+  border:1px solid var(--line);margin-bottom:7px;
+}
+.sh-ic{font-size:21px;line-height:1;text-align:center}
+.sh-n{font-size:13px;font-weight:600;color:var(--ink)}
+.sh-art{
+  font-size:11px;line-height:1.5;margin-top:3px;word-break:break-all;
+  /* Emoji have their own colour, so dim the whole run rather than the text. */
+  opacity:.75;
+}
+.sh-more{font-family:var(--mono);color:var(--faint);opacity:1;font-size:10px}
+.sh-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-top:3px}
+.sh-x{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--cash);font-variant-numeric:tabular-nums}
+
+/* Compact bands for the things you own one of, where a count is meaningless
+   and only presence matters. */
+.sh-chips{display:flex;flex-wrap:wrap;gap:6px}
+.sh-chip{
+  display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--line);
+  font-size:14px;line-height:1;
+}
+.sh-chip span{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.sh-empty{font-family:var(--mono);font-size:11px;color:var(--faint);padding:2px 0}
+
+/* At three columns the left rail is fixed-width, so viewport-relative type
+   would size against the wrong thing. */
+@media(min-width:1200px){
+  .main{align-items:stretch}
+  .cash{font-size:clamp(30px,2.4vw,44px)}
+  .ticket{width:100%}
+  .stats{width:100%}
+  .brand{align-self:flex-start}
+}
 
 /* ---------- revenue ---------- */
 .readout{text-align:center;margin-top:6px}
@@ -498,7 +574,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
    specific it looks. Everything above the fixed store has to fit in what
    is left of the screen, so the click side gets tighter on every axis. */
 @media(max-width:900px){
-  .main{padding:12px 16px calc(46vh + 14px);gap:12px}
+  /* The clearance for the fixed store belongs on whatever is last in the
+     document, so the tail of it can still be scrolled above the panel.
+     That used to be .main; the company sheet now sits below it, and giving
+     both the padding would leave a 46vh hole between them. */
+  .main{padding:12px 16px 12px;gap:12px}
+  .sheet{padding:0 16px calc(46vh + 14px)}
   .ticket{width:min(300px,88vw);height:78px;border-radius:12px}
   .ticket-stub{flex-basis:56px}
   .ticket-icon{font-size:24px}
@@ -608,6 +689,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
     </div>
 
   </main>
+
+  <!-- The company sheet: everything permanent you own, in the middle column.
+       Read-only on purpose -- buying happens in the store on the right, and
+       this is the "look what I have built" surface the game never had. -->
+  <section class="sheet" id="sheet" aria-label="Your company"></section>
 
   <aside class="store">
     <div class="tabs">
@@ -2450,6 +2536,93 @@ function renderBuffs(){
   ).join("");
 }
 
+/* ---------- the company sheet ----------
+   Everything permanent you own, in one place: staff you have hired, tools
+   bought, clients signed, training spent, and what selling the company has
+   bought you. All of it is already visible somewhere in the store, but only
+   as things still to buy -- nothing in the game showed what you had.
+
+   Rebuilt only when the set of things you own changes, not every tick, for
+   the same reason the store list is: this is a lot of DOM to throw away
+   ten times a second, and none of it moves between purchases. */
+const SHEET_ART_CAP = 24;   // repeated icons before it turns into "+N"
+
+function artFor(icon, n){
+  const shown = Math.min(n, SHEET_ART_CAP);
+  return icon.repeat(shown) +
+    (n > shown ? '<span class="sh-more"> +' + (n - shown) + '</span>' : "");
+}
+
+function sheetSignature(){
+  return [
+    STAFF.map(d=>c(d.id)).join(","),
+    Object.keys(S.upgrades).length,
+    Object.keys(S.clients).length,
+    Object.keys(S.repUp).length,
+    STAFF.map(d=>levelOf(d.id)).join(","),
+    // The per-tier income figures move constantly; round hard so the sheet
+    // rebuilds on a real change rather than on every cent.
+    Math.round(Math.log10(Math.max(1, totalRate())) * 20)
+  ].join("|");
+}
+
+let sheetSig = null;
+function renderSheet(force){
+  const el = $("sheet");
+  if(!el) return;
+  const sig = sheetSignature();
+  if(!force && sig === sheetSig) return;
+  sheetSig = sig;
+
+  const total = totalRate();
+  const owned = STAFF.filter(d=>c(d.id) > 0);
+  const tools = UPGRADES.filter(u=>S.upgrades[u.id]);
+  const signed = CLIENTS.filter(cl=>S.clients[cl.id]);
+  const perks = REP_UPGRADES.filter(u=>hasRep(u.id));
+  const trained = STAFF.filter(d=>levelOf(d.id) > 0);
+
+  const sec = (title, count, body) =>
+    '<div class="sh-sec"><div class="sh-h">' + title +
+    (count != null ? '<b>' + count + '</b>' : "") + '</div>' + body + '</div>';
+
+  // Only ever called for a non-empty list -- each caller checks first, so a
+  // section with nothing in it is left out entirely rather than shown empty.
+  const chips = list =>
+    '<div class="sh-chips">' + list.map(x=>
+      '<div class="sh-chip">' + x.icon + '<span>' + x.name + '</span></div>'
+    ).join("") + '</div>';
+
+  let html = "";
+
+  html += sec("Staff", owned.length ? S.staffTotal + " hired" : null,
+    owned.length
+      ? owned.map(d=>{
+          const n = c(d.id), mine = rateOf(d);
+          const share = total > 0 ? Math.round(mine / total * 100) : 0;
+          const lv = levelOf(d.id);
+          return '<div class="sh-row">' +
+            '<div class="sh-ic">' + d.icon + '</div>' +
+            '<div><div class="sh-n">' + d.name +
+              (lv ? ' <span class="lvl">Lv ' + lv + '</span>' : "") + '</div>' +
+            '<div class="sh-art">' + artFor(d.icon, n) + '</div>' +
+            '<div class="sh-sub">$' + rateStr(mine) + '/s &middot; ' + share + '% of income</div></div>' +
+            '<div class="sh-x">&times;' + n + '</div>' +
+          '</div>';
+        }).join("")
+      : '<div class="sh-empty">Nobody yet. Close tickets, then hire.</div>');
+
+  if(tools.length)  html += sec("Tools owned",    tools.length + "/" + UPGRADES.length,   chips(tools));
+  if(signed.length) html += sec("Clients signed", signed.length + "/" + CLIENTS.length,   chips(signed));
+  if(perks.length)  html += sec("Reputation",     perks.length + "/" + REP_UPGRADES.length, chips(perks));
+
+  if(trained.length) html += sec("Training", null,
+    '<div class="sh-chips">' + trained.map(d=>
+      '<div class="sh-chip">' + d.icon + '<span>' + d.name + ' Lv ' + levelOf(d.id) + '</span></div>'
+    ).join("") + '</div>');
+
+  el.innerHTML = html;
+}
+
 /* ---------- profile, account and cloud saves ----------
    The whole of this section is optional. api.php lives on rootlabs.us,
    not in this repo, and every call to it is allowed to fail: opened as a
@@ -2608,6 +2781,7 @@ setInterval(()=>{
   earn(totalRate() * dt);
   renderHead();
   renderList();
+  renderSheet();
   // Catches clicks/lifetime/staff crossing a threshold passively, on top
   // of the immediate checks after a hire, a purchase, or an exit.
   checkAchievements();
@@ -2633,6 +2807,7 @@ setInterval(save, 20000);
 load();
 renderHead();
 renderList();
+renderSheet(true);
 coachSync();
 // A save from before achievements existed may already qualify for several
 // -- retroactively award them on load rather than making a returning
