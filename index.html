@@ -280,6 +280,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   width:30px;height:30px;border-radius:7px;background:var(--accent);
   color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:15px;
 }
+.brand-mark svg{width:20px;height:20px;display:block}
+/* Dark rack units cut out of the accent tile, with the tile colour showing
+   back through as status LEDs. */
+.brand-mark rect{fill:var(--accent-ink)}
+.brand-mark .led{fill:var(--accent)}
 .brand-name{font-weight:600;font-size:17px;letter-spacing:-.01em}
 .brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
 
@@ -298,10 +303,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
 /* One row per staff tier owned. The repeated icons are the point: the row
    gets visibly heavier as you hire, which a number alone never does. */
+/* Tiles rather than one row per line: the middle column can be over a
+   thousand pixels wide on a big monitor, and a single stretched row per
+   staff tier left the count stranded miles from the name. */
+.sh-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:7px}
 .sh-row{
   display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;
   padding:9px 11px;border-radius:10px;background:var(--panel);
-  border:1px solid var(--line);margin-bottom:7px;
+  border:1px solid var(--line);
 }
 .sh-ic{font-size:21px;line-height:1;text-align:center}
 .sh-n{font-size:13px;font-weight:600;color:var(--ink)}
@@ -330,7 +339,6 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 @media(min-width:1200px){
   .main{align-items:stretch}
   .cash{font-size:clamp(30px,2.4vw,44px)}
-  .ticket{width:100%}
   .stats{width:100%}
   .brand{align-self:flex-start}
 }
@@ -351,10 +359,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
    perforation, and the body of the ticket -- rather than a big square
    icon tile that needed a paragraph of hint text to explain itself. */
 .ticket{
-  width:min(340px,86vw);height:104px;border-radius:14px;
-  background:linear-gradient(160deg,var(--panel2),var(--panel));
+  width:min(180px,58vw);aspect-ratio:6/5;border-radius:16px;
+  background:
+    /* the perforation */
+    repeating-linear-gradient(to bottom, var(--line) 0 5px, transparent 5px 11px)
+      36px 12px / 2px calc(100% - 24px) no-repeat,
+    linear-gradient(160deg,var(--panel2),var(--panel));
   border:1px solid var(--line);
-  display:flex;align-items:stretch;
+  display:grid;place-items:center;
   transition:transform .07s ease,box-shadow .2s ease,border-color .2s ease;
   box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);
   position:relative;overflow:hidden;
@@ -368,19 +380,14 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .ticket:hover::after{opacity:1}
 .ticket:active{transform:scale(.97) translateY(0)}
 
-.ticket-stub{flex:0 0 78px;display:grid;place-items:center}
-.ticket-icon{font-size:32px;line-height:1}
-.ticket-divider{
-  flex:0 0 0;align-self:stretch;margin:14px 0;
-  border-left:2px dashed var(--line);
+/* The glyph is the whole button. A dashed perforation down the left keeps
+   it reading as a ticket rather than a generic icon tile -- drawn as a
+   background layer so the ::after hover glow stays free. */
+.ticket-glyph{
+  font-size:clamp(54px,7vw,76px);line-height:1;
+  filter:drop-shadow(0 6px 16px rgba(0,0,0,.55));
+  transform:translateX(7px);
 }
-.ticket-main{
-  flex:1;min-width:0;padding:0 20px;
-  display:flex;flex-direction:column;justify-content:center;gap:4px;
-  text-align:left;
-}
-.ticket-label{font-weight:600;font-size:16px;letter-spacing:-.005em}
-.ticket-worth{font-family:var(--mono);font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
 
 /* Present to screen readers, invisible on screen -- the tour and the
    tooltip both explain the controls now. */
@@ -396,7 +403,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 }
 @keyframes rise{from{opacity:1;transform:translate(-50%,0)}to{opacity:0;transform:translate(-50%,-64px)}}
 @media(prefers-reduced-motion:reduce){
-  .float{animation-duration:.01ms}
+  /* Not .01ms. Now that the button no longer prints what a click is worth,
+     this floater is the only place that number appears, and cutting the
+     animation short used to make it vanish before it could be read. No
+     motion, but it stays up until its own one-second removal. */
+  .float{animation:none}
   .ticket,.ticket:hover,.ticket:active{transition:none;transform:none}
 }
 
@@ -580,12 +591,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
      both the padding would leave a 46vh hole between them. */
   .main{padding:12px 16px 12px;gap:12px}
   .sheet{padding:0 16px calc(46vh + 14px)}
-  .ticket{width:min(300px,88vw);height:78px;border-radius:12px}
-  .ticket-stub{flex-basis:56px}
-  .ticket-icon{font-size:24px}
-  .ticket-main{padding:0 14px}
-  .ticket-label{font-size:14px}
-  .ticket-worth{font-size:12.5px}
+  .ticket{width:min(150px,44vw);border-radius:14px}
   .cash{font-size:clamp(30px,10vw,44px)}
   .stats{grid-template-columns:repeat(4,1fr);gap:6px;width:100%}
   .stat{padding:7px 8px}
@@ -623,7 +629,19 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 <div class="app">
   <main class="main">
     <div class="brand">
-      <div class="brand-mark">M</div>
+      <!-- A rack, not a letter. It echoes the datacenter floor the game
+           already draws behind everything, and reads at 30px where a
+           detailed glyph would not. -->
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <rect x="3.5" y="3" width="17" height="5.4" rx="1.6"/>
+          <rect x="3.5" y="9.3" width="17" height="5.4" rx="1.6"/>
+          <rect x="3.5" y="15.6" width="17" height="5.4" rx="1.6"/>
+          <circle class="led" cx="7.2" cy="5.7" r="1.05"/>
+          <circle class="led" cx="7.2" cy="12" r="1.05"/>
+          <circle class="led" cx="7.2" cy="18.3" r="1.05"/>
+        </svg>
+      </div>
       <div>
         <div class="brand-name">MSP Tycoon</div>
         <div class="brand-sub">Managed Service Provider</div>
@@ -644,15 +662,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
     <div class="ticket-wrap" id="ticketWrap">
       <button class="ticket" id="ticket" aria-label="Close a support ticket">
-        <span class="ticket-stub"><span class="ticket-icon">🎫</span></span>
-        <span class="ticket-divider"></span>
-        <span class="ticket-main">
-          <span class="ticket-label">Close a Ticket</span>
-          <span class="ticket-worth" id="clickWorth">+$1</span>
-        </span>
-        <!-- Visually hidden: the tour and the tooltip both explain how to
-             play now, so this stopped earning its place on the button
-             itself. Kept for screen readers. -->
+        <span class="ticket-glyph" aria-hidden="true">🎫</span>
+        <!-- What a click is worth used to be printed on the button. It now
+             floats up on each click instead, so the target is the ticket
+             and nothing else. The line under the cash readout still says
+             whether clicking or payroll is ahead, which is the part that
+             actually stopped the early game reading as broken. -->
         <span class="sr-only" id="ticketHint">click, or press space</span>
       </button>
     </div>
@@ -1362,7 +1377,7 @@ function renderHead(){
   $("cash").textContent = money(S.cash);
   const tr = totalRate(), cv = clickValue();
   $("rate").textContent = "$" + rateStr(tr);
-  $("clickWorth").textContent = "+" + money(cv);
+
 
   // Tell the player outright which of the two numbers is currently doing
   // the work, rather than leaving it to be inferred from a $0.1/s label
@@ -2444,20 +2459,35 @@ function placeCoach(at, side){
   }
   const r = at.getBoundingClientRect(), b = coachEl.getBoundingClientRect();
   const gap = 16;
-  let x = side === "left" ? r.left - b.width - gap : r.right + gap;
+  // Measured on the step it first appears, the panel can still report a
+  // zero box. Positioning against that put it a full panel-width to the
+  // right of where it belonged -- on a wide screen, directly on top of the
+  // store it was pointing at. Fall back to its laid-out size, then its
+  // stylesheet width.
+  const bw = b.width  || coachEl.offsetWidth  || 290;
+  const bh = b.height || coachEl.offsetHeight || 180;
+  let x = side === "left" ? r.left - bw - gap : r.right + gap;
   // Flip to the other side rather than hang off the edge.
   if(x < 8) x = r.right + gap;
-  if(x + b.width > innerWidth - 8) x = r.left - b.width - gap;
-  x = Math.max(8, Math.min(x, innerWidth - b.width - 8));
-  let y = r.top + r.height/2 - b.height/2;
-  y = Math.max(8, Math.min(y, innerHeight - b.height - 8));
+  if(x + bw > innerWidth - 8) x = r.left - bw - gap;
+  x = Math.max(8, Math.min(x, innerWidth - bw - 8));
+  // Most steps point at a store tab, and "just left of the tab" is still
+  // inside the store -- the panel landed on top of the thing it was asking
+  // the player to look at. Keep it clear of the store's edge entirely.
+  const storeEl = document.querySelector(".store");
+  if(storeEl){
+    const s = storeEl.getBoundingClientRect();
+    if(x + bw > s.left - gap) x = Math.max(8, s.left - bw - gap);
+  }
+  let y = r.top + r.height/2 - bh/2;
+  y = Math.max(8, Math.min(y, innerHeight - bh - 8));
   coachEl.style.left = Math.round(x) + "px";
   coachEl.style.top  = Math.round(y) + "px";
 
   const arrow = coachEl.querySelector(".co-arrow");
   if(arrow){
     const pointsLeft = x > r.left;
-    arrow.style.top = Math.max(10, Math.min(r.top + r.height/2 - y - 5, b.height - 20)) + "px";
+    arrow.style.top = Math.max(10, Math.min(r.top + r.height/2 - y - 5, bh - 20)) + "px";
     arrow.style.left = pointsLeft ? "-6px" : "";
     arrow.style.right = pointsLeft ? "" : "-6px";
     arrow.style.transform = "rotate(" + (pointsLeft ? -45 : 135) + "deg)";
@@ -2596,7 +2626,7 @@ function renderSheet(force){
 
   html += sec("Staff", owned.length ? S.staffTotal + " hired" : null,
     owned.length
-      ? owned.map(d=>{
+      ? '<div class="sh-rows">' + owned.map(d=>{
           const n = c(d.id), mine = rateOf(d);
           const share = total > 0 ? Math.round(mine / total * 100) : 0;
           const lv = levelOf(d.id);
@@ -2608,7 +2638,7 @@ function renderSheet(force){
             '<div class="sh-sub">$' + rateStr(mine) + '/s &middot; ' + share + '% of income</div></div>' +
             '<div class="sh-x">&times;' + n + '</div>' +
           '</div>';
-        }).join("")
+        }).join("") + '</div>'
       : '<div class="sh-empty">Nobody yet. Close tickets, then hire.</div>');
 
   if(tools.length)  html += sec("Tools owned",    tools.length + "/" + UPGRADES.length,   chips(tools));
