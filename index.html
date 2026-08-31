@@ -615,6 +615,36 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   .stat-v{font-size:13px;margin-top:1px}
   /* The room keeps the strip between the stats and the store. */
   #floor{height:30vh;bottom:46vh}
+
+  /* The nav is app chrome, and in the document it sits between the click
+     column and the sheet -- which on a phone put it at y=528, entirely
+     behind a store panel fixed from y=438. It was unreachable without
+     scrolling for it. Fixed to the top instead: sticky would not do, since
+     a sticky grid item is confined to its own auto-height row and has no
+     travel at all. Taken out of flow, its grid row collapses to nothing,
+     so the areas below do not need reordering. */
+  .topnav{
+    position:fixed; top:0; left:0; right:0; z-index:30;
+    padding:8px 12px;
+    background:linear-gradient(180deg,var(--bg) 62%,rgba(11,16,23,0));
+  }
+  .topnav-in{max-width:none}
+  .main{padding-top:68px}
+
+  /* Anchored to the nav rather than to the button that opens it. Options
+     sits at the right-hand end of a narrow bar, so a panel hung off that
+     button's right edge started at x=-80 and ran off the screen. With
+     .menu static, the fixed .topnav becomes the containing block and the
+     panel can simply span it. */
+  .menu{position:static}
+  .menu-panel,
+  #opts .menu-panel{left:12px;right:12px;width:auto;top:calc(100% + 4px)}
+
+  /* Thumb-sized. Every one of these was under 38px on a phone. */
+  .nav-btn{padding:12px 13px}
+  .train-go,.debt-go,.mkt-go{padding:13px 14px;font-size:11.5px}
+  .pp-row .btn{padding:11px 12px;font-size:11.5px}
+  #coach .co-skip{padding:12px 2px;display:inline-block}
 }
 </style>
 </head>
