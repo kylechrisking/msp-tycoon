@@ -8,8 +8,9 @@ all again with a better reputation.
 
 **[rootlabs.us/games/MSPtycoon](https://rootlabs.us/games/MSPtycoon)**
 
-Unlisted while it's still being tuned — reachable by direct link, not
-linked from the site yet.
+Listed on /games, but that page is noindex and the entry is marked in
+development, so it is reachable rather than findable. Making it findable
+is a deliberate step, not a default.
 
 ## Running it
 
@@ -171,4 +172,3 @@ Known gaps:
 - The upgrade and achievement tails are still shape rather than
   measurement. Upgrades past AI Triage and the achievements above $1B
   lifetime extend the existing curves by eye. Reachable is not tuned.
-- The brand mark in the sidebar is still a placeholder "M".
