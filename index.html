@@ -182,39 +182,56 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
        font-size:11px; letter-spacing:.04em; text-transform:uppercase;
        padding:4px 9px; border-radius:999px; white-space:nowrap }
 
-/* ---------- profile ----------
-   Sits above everything, including the escalated tickets, so the panel is
-   never fighting a spawned P1 for the same corner. */
-/* Above the tour coach (70), the tooltip and escalations (60): an open
-   panel is a deliberate action and should not be painted over. */
-.profile{ position:fixed; top:14px; right:16px; z-index:80 }
-/* The store is a 384px right-hand column on a desktop, and its tab bar
-   starts at y=0, so a button in the viewport's top-right corner sits on
-   top of the last tab and makes it unclickable. Clear the column. Below
-   900px the store moves underneath and the corner is free again. */
-@media (min-width:901px){
-  .profile{ right:calc(384px + 16px) }
-  .profile-panel{ right:0 }
+/* ---------- top nav and its menus ----------
+   Sits over the middle column so the store stays a shop and the click
+   column stays a click column. Everything here is about the save rather
+   than the game. */
+.topnav{
+  display:flex; justify-content:center;
+  padding:14px 20px 0; min-width:0;
 }
-.profile-btn{
-  position:relative; width:38px; height:38px; padding:0; border-radius:50%;
-  display:grid; place-items:center; cursor:pointer;
-  background:var(--panel); border:1px solid var(--line); color:var(--dim);
+.topnav-in{
+  display:flex; gap:7px; align-items:center; width:100%; max-width:620px;
+  padding:7px; border-radius:12px;
+  background:linear-gradient(180deg,rgba(27,37,49,.72),rgba(20,28,39,.72));
+  border:1px solid var(--line); backdrop-filter:blur(6px);
 }
-.profile-btn:hover{ color:var(--ink); border-color:var(--accent) }
-.profile-btn svg{ width:20px; height:20px; fill:none; stroke:currentColor }
+.nav-btn{
+  position:relative; display:flex; align-items:center; gap:7px;
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em;
+  text-transform:uppercase; color:var(--dim); cursor:pointer;
+  padding:8px 12px; border-radius:8px; border:1px solid transparent;
+  background:none; transition:color .15s, background .15s, border-color .15s;
+}
+.nav-btn:hover{ color:var(--ink); background:var(--panel2); border-color:var(--line) }
+.nav-btn svg{ width:15px; height:15px; fill:none; stroke:currentColor }
+.menu.open > .nav-btn{ color:var(--accent); background:var(--panel2); border-color:var(--accent-dark) }
 /* Unread-style dot: something has been unlocked since the panel was opened. */
-.profile-dot{
-  position:absolute; top:-2px; right:-2px; width:10px; height:10px;
-  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+.nav-dot{
+  width:7px; height:7px; border-radius:50%; background:var(--accent);
 }
-.profile-panel{
-  position:absolute; top:46px; right:0; width:300px; max-height:70vh;
+
+.menu{ position:relative }
+.menu-panel{
+  position:absolute; top:calc(100% + 8px); left:0; width:min(330px,86vw); max-height:70vh;
   display:none; flex-direction:column; overflow:hidden;
+  /* Above the tour coach (70), the tooltip and escalations (60): an open
+     menu is a deliberate action and should not be painted over. */
+  z-index:80;
   background:var(--panel); border:1px solid var(--line); border-radius:12px;
   box-shadow:0 18px 50px rgba(0,0,0,.55);
 }
-.profile.open .profile-panel{ display:flex }
+.menu.open .menu-panel{ display:flex }
+/* The last menu opens near the right edge of a narrow column. */
+#opts .menu-panel{ left:auto; right:0 }
+
+.save-box{
+  width:100%; height:76px; margin-top:9px; resize:vertical;
+  font-family:var(--mono); font-size:10.5px; line-height:1.45;
+  color:var(--dim); background:var(--bg2); border:1px solid var(--line);
+  border-radius:8px; padding:8px; word-break:break-all;
+}
+.save-box:focus{ outline:none; border-color:var(--accent-dark); color:var(--ink) }
 .pp-sec{ padding:12px 14px; border-bottom:1px solid var(--line) }
 .pp-sec:last-child{ border-bottom:0 }
 .pp-grow{ min-height:0; display:flex; flex-direction:column }
@@ -236,11 +253,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .pp-a b{ font-weight:600; color:var(--ink); display:block }
 .pp-a s{ text-decoration:none; color:var(--dim); font-size:11px; display:block }
 
-/* On a phone the panel is nearly full width rather than a 300px card
-   floating off the right edge. */
+/* On a phone the menus are nearly full width rather than a card floating
+   off the edge of a narrow column. */
 @media (max-width:520px){
-  .profile{ top:10px; right:10px }
-  .profile-panel{ width:calc(100vw - 20px); right:0 }
+  .menu-panel{ width:calc(100vw - 24px) }
+  .menu:first-child .menu-panel{ left:0 }
+  #opts .menu-panel{ right:0; left:auto }
 }
 
 /* ---------- shell ---------- */
@@ -251,10 +269,12 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .app{
   display:grid;
   grid-template-columns:360px minmax(0,1fr) 384px;
-  grid-template-areas:"main sheet store";
+  grid-template-areas:"main nav store" "main sheet store";
+  grid-template-rows:auto minmax(0,1fr);
   min-height:100vh;
 }
 .main{grid-area:main}
+.topnav{grid-area:nav}
 .sheet{grid-area:sheet}
 .store{grid-area:store}
 
@@ -263,12 +283,13 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 @media(max-width:1199px){
   .app{
     grid-template-columns:minmax(0,1fr) 384px;
-    grid-template-areas:"main store" "sheet store";
+    grid-template-areas:"main store" "nav store" "sheet store";
+    grid-template-rows:auto auto minmax(0,1fr);
     align-content:start;
   }
 }
 @media(max-width:900px){
-  .app{grid-template-columns:1fr;grid-template-areas:"main" "sheet" "store"}
+  .app{grid-template-columns:1fr;grid-template-areas:"main" "nav" "sheet" "store";grid-template-rows:auto auto auto auto}
 }
 /* The rest of the phone layout lives at the end of this stylesheet, after
    the rules it needs to override. */
@@ -289,7 +310,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .brand-sub{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase}
 
 /* ---------- the company sheet (middle column) ---------- */
-.sheet{padding:22px 20px 40px;display:flex;flex-direction:column;gap:18px;min-width:0}
+/* Capped and centred: the middle column is whatever is left over after the
+   two fixed rails, which on a wide monitor is far wider than a readable
+   measure. */
+.sheet{padding:0 20px 40px;display:flex;flex-direction:column;gap:18px;min-width:0;align-items:center}
+.sheet > *{width:100%;max-width:620px}
 .sh-sec{min-width:0}
 .sh-h{
   display:flex;align-items:baseline;gap:8px;margin-bottom:9px;
@@ -303,10 +328,11 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
 /* One row per staff tier owned. The repeated icons are the point: the row
    gets visibly heavier as you hire, which a number alone never does. */
-/* Tiles rather than one row per line: the middle column can be over a
-   thousand pixels wide on a big monitor, and a single stretched row per
-   staff tier left the count stranded miles from the name. */
-.sh-rows{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:7px}
+/* Stacked, one per tier, the way Cookie Clicker lists its buildings. The
+   column itself is capped below rather than the rows being tiled: a row
+   stretched across a 1250px monitor left the count stranded from the name,
+   but tiling them broke the single vertical read. */
+.sh-rows{display:flex;flex-direction:column;gap:7px}
 .sh-row{
   display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:11px;align-items:center;
   padding:9px 11px;border-radius:10px;background:var(--panel);
@@ -358,36 +384,26 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 /* Shaped like the thing it represents: a stub with the icon, a torn
    perforation, and the body of the ticket -- rather than a big square
    icon tile that needed a paragraph of hint text to explain itself. */
+/* The ticket IS the button -- no card behind it. Everything that used to
+   be panel chrome is gone; hover and press act on the shape itself. */
 .ticket{
-  width:min(180px,58vw);aspect-ratio:6/5;border-radius:16px;
-  background:
-    /* the perforation */
-    repeating-linear-gradient(to bottom, var(--line) 0 5px, transparent 5px 11px)
-      36px 12px / 2px calc(100% - 24px) no-repeat,
-    linear-gradient(160deg,var(--panel2),var(--panel));
-  border:1px solid var(--line);
-  display:grid;place-items:center;
-  transition:transform .07s ease,box-shadow .2s ease,border-color .2s ease;
-  box-shadow:0 14px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);
-  position:relative;overflow:hidden;
+  width:min(210px,64vw);padding:0;border:0;background:none;
+  display:block;cursor:pointer;line-height:0;
+  filter:drop-shadow(0 14px 30px rgba(0,0,0,.55));
+  transition:transform .07s ease,filter .2s ease;
 }
-.ticket::after{
-  content:"";position:absolute;inset:0;
-  background:radial-gradient(circle at 18% 50%,rgba(62,216,208,.16),transparent 62%);
-  opacity:0;transition:opacity .2s;
+.ticket-svg{width:100%;height:auto;display:block;overflow:visible}
+.ticket-no{
+  font-family:var(--mono);font-size:21px;font-weight:700;
+  fill:rgba(0,0,0,.6);text-anchor:middle;letter-spacing:.04em;
 }
-.ticket:hover{border-color:var(--accent-dark);transform:translateY(-2px)}
-.ticket:hover::after{opacity:1}
-.ticket:active{transform:scale(.97) translateY(0)}
+.ticket:hover{transform:translateY(-3px) scale(1.02);filter:drop-shadow(0 18px 36px rgba(0,0,0,.6)) brightness(1.06)}
+.ticket:active{transform:scale(.95)}
+.ticket:focus-visible{outline:2px solid var(--accent);outline-offset:6px;border-radius:14px}
 
 /* The glyph is the whole button. A dashed perforation down the left keeps
    it reading as a ticket rather than a generic icon tile -- drawn as a
    background layer so the ::after hover glow stays free. */
-.ticket-glyph{
-  font-size:clamp(54px,7vw,76px);line-height:1;
-  filter:drop-shadow(0 6px 16px rgba(0,0,0,.55));
-  transform:translateX(7px);
-}
 
 /* Present to screen readers, invisible on screen -- the tour and the
    tooltip both explain the controls now. */
@@ -408,7 +424,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
      animation short used to make it vanish before it could be read. No
      motion, but it stays up until its own one-second removal. */
   .float{animation:none}
-  .ticket,.ticket:hover,.ticket:active{transition:none;transform:none}
+  .ticket,.ticket:hover,.ticket:active{transition:none;transform:none;filter:drop-shadow(0 14px 30px rgba(0,0,0,.55))}
 }
 
 /* ---------- stat strip ---------- */
@@ -591,7 +607,7 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
      both the padding would leave a 46vh hole between them. */
   .main{padding:12px 16px 12px;gap:12px}
   .sheet{padding:0 16px calc(46vh + 14px)}
-  .ticket{width:min(150px,44vw);border-radius:14px}
+  .ticket{width:min(160px,46vw)}
   .cash{font-size:clamp(30px,10vw,44px)}
   .stats{grid-template-columns:repeat(4,1fr);gap:6px;width:100%}
   .stat{padding:7px 8px}
@@ -605,26 +621,6 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 <body>
 
 <canvas id="floor" aria-hidden="true"></canvas>
-
-<!-- Profile. The icon is the same one the rest of rootlabs.us uses in its
-     site menu, so the game does not introduce a second visual language for
-     "your account". -->
-<div class="profile" id="profile">
-  <button class="profile-btn" id="profileBtn" aria-haspopup="true" aria-expanded="false" aria-label="Profile and achievements">
-    <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path></svg>
-    <span class="profile-dot" id="profileDot" style="display:none"></span>
-  </button>
-  <div class="profile-panel" id="profilePanel" role="dialog" aria-label="Profile">
-    <div class="pp-sec">
-      <h6>Account</h6>
-      <div id="ppAccount" class="pp-account">Checking&hellip;</div>
-    </div>
-    <div class="pp-sec pp-grow">
-      <h6>Achievements <span id="ppAchCount"></span></h6>
-      <div id="ppAch" class="pp-ach"></div>
-    </div>
-  </div>
-</div>
 
 <div class="app">
   <main class="main">
@@ -662,7 +658,40 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 
     <div class="ticket-wrap" id="ticketWrap">
       <button class="ticket" id="ticket" aria-label="Close a support ticket">
-        <span class="ticket-glyph" aria-hidden="true">🎫</span>
+        <!-- The button is the ticket: a real shape with punched notches and
+             a torn stub, not a card with an icon sitting in it. The number
+             is the next ticket in the queue, so it ticks over as you play. -->
+        <svg class="ticket-svg" viewBox="0 0 210 128" aria-hidden="true">
+          <defs>
+            <linearGradient id="tkFace" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#FFD34D"/>
+              <stop offset="1" stop-color="#F0A81E"/>
+            </linearGradient>
+            <!-- White keeps, black punches: the two notches are cut out of
+                 the card rather than drawn over it, so the background shows
+                 through them however the page is coloured. -->
+            <mask id="tkCut">
+              <rect x="0" y="0" width="210" height="128" rx="14" fill="#fff"/>
+              <circle cx="0"   cy="64" r="15" fill="#000"/>
+              <circle cx="210" cy="64" r="15" fill="#000"/>
+            </mask>
+          </defs>
+          <g mask="url(#tkCut)">
+            <rect x="0" y="0" width="210" height="128" fill="url(#tkFace)"/>
+            <rect x="0" y="0" width="62" height="128" fill="rgba(0,0,0,.09)"/>
+            <g fill="rgba(0,0,0,.42)">
+              <rect x="14" y="34" width="4"  height="60" rx="1"/>
+              <rect x="22" y="34" width="2"  height="60" rx="1"/>
+              <rect x="28" y="34" width="5"  height="60" rx="1"/>
+              <rect x="37" y="34" width="2"  height="60" rx="1"/>
+              <rect x="43" y="34" width="3"  height="60" rx="1"/>
+              <rect x="50" y="34" width="2"  height="60" rx="1"/>
+            </g>
+            <line x1="62" y1="14" x2="62" y2="114" stroke="rgba(0,0,0,.35)"
+                  stroke-width="2.5" stroke-dasharray="7 7" stroke-linecap="round"/>
+            <text class="ticket-no" id="ticketNo" x="136" y="72">#000001</text>
+          </g>
+        </svg>
         <!-- What a click is worth used to be printed on the button. It now
              floats up on each click instead, so the target is the ticket
              and nothing else. The line under the cash readout still says
@@ -708,6 +737,63 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
   <!-- The company sheet: everything permanent you own, in the middle column.
        Read-only on purpose -- buying happens in the store on the right, and
        this is the "look what I have built" surface the game never had. -->
+  <!-- Everything that is about the save rather than the game: account,
+       save, and the options behind it. Sits over the middle column so the
+       store stays purely a shop and the click column stays purely a
+       click column. -->
+  <nav class="topnav" aria-label="Game options">
+    <div class="topnav-in">
+      <!-- The account icon is the same one the rest of rootlabs.us uses in
+           its site menu, so the game does not introduce a second visual
+           language for "your account". -->
+      <div class="menu" id="profile">
+        <button class="nav-btn" id="profileBtn" aria-haspopup="dialog" aria-expanded="false">
+          <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"></path></svg>
+          Account
+          <span class="nav-dot" id="profileDot" style="display:none"></span>
+        </button>
+        <div class="menu-panel" id="profilePanel" role="dialog" aria-label="Account and achievements">
+          <div class="pp-sec">
+            <h6>Account</h6>
+            <div id="ppAccount" class="pp-account">Checking&hellip;</div>
+          </div>
+          <div class="pp-sec pp-grow">
+            <h6>Achievements <span id="ppAchCount"></span></h6>
+            <div id="ppAch" class="pp-ach"></div>
+          </div>
+        </div>
+      </div>
+
+      <button class="nav-btn" id="saveBtn">Save</button>
+
+      <div class="menu" id="opts">
+        <button class="nav-btn" id="optsBtn" aria-haspopup="dialog" aria-expanded="false">Options</button>
+        <div class="menu-panel" id="optsPanel" role="dialog" aria-label="Options">
+          <div class="pp-sec">
+            <h6>Save file</h6>
+            <div class="pp-note" style="margin-top:0">
+              Your save lives in this browser. Copy it out as text to keep it
+              somewhere else, or move it to another machine without an account.
+            </div>
+            <textarea id="saveText" class="save-box" spellcheck="false"
+                      aria-label="Save data" placeholder="Your save will appear here"></textarea>
+            <div class="pp-row">
+              <button class="btn" id="expBtn">Copy out</button>
+              <button class="btn" id="dlBtn">Download .txt</button>
+              <button class="btn" id="impBtn">Load from box</button>
+            </div>
+            <div class="pp-note" id="ioNote"></div>
+          </div>
+          <div class="pp-sec">
+            <h6>Danger</h6>
+            <div class="pp-row"><button class="btn btn-warn" id="wipeBtn">Wipe this save</button></div>
+            <div class="pp-note">Erases everything in this browser. Copy your save out first.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
   <section class="sheet" id="sheet" aria-label="Your company"></section>
 
   <aside class="store">
@@ -718,10 +804,6 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <button class="tab" data-tab="clients">Clients <span class="badge" id="clBadge" style="display:none">0</span></button>
     </div>
     <div class="list" id="list"></div>
-    <div class="bar">
-      <button class="mini" id="saveBtn">Save</button>
-      <button class="mini" id="wipeBtn">Wipe</button>
-    </div>
   </aside>
 </div>
 
@@ -1249,7 +1331,10 @@ const TICK_MS  = 100;               // one loop, 10Hz
 const PRESTIGE_MIN = 1e6;           // lifetime revenue before an exit is allowed
 
 /* ---------- mutable state (this, and only this, is saved) ---------- */
-let S = {
+/* One definition of a clean save. Wipe used to build its own literal, which
+   silently fell behind every field added since -- a wiped game came back
+   with no repUp, no mkt and no levels, and threw on the next tick. */
+function freshState(){ return {
   v: 1,
   cash: 0,
   lifetime: 0,
@@ -1285,7 +1370,9 @@ let S = {
   clients: {},               // id -> true, signed clients (survive prestige)
   lastSeen: Date.now(),
   tut: {}                    // tour progress: {step, done}
-};
+}; }
+
+let S = freshState();
 
 const c = id => S.staff[id] || 0;
 
@@ -1395,6 +1482,14 @@ function renderHead(){
       note.classList.remove("lead");
     }
   }
+  // The ticket shows the next number in the queue, so the button itself
+  // ticks over as you play.
+  const no = $("ticketNo");
+  if(no){
+    const label = "#" + String(S.clicks + 1).padStart(6, "0");
+    if(no.textContent !== label) no.textContent = label;
+  }
+
   const hint = $("ticketHint");
   if(hint){
     hint.textContent = canHold()
@@ -2062,8 +2157,9 @@ $("wipeBtn").onclick = ()=>{
   try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
   // tut resets too: a wipe is someone starting over, and the tour is part
   // of starting.
-  S = {v:1,cash:0,lifetime:0,clicks:0,staff:{},staffTotal:0,upgrades:{},reputation:0,exits:0,ach:{},clients:{},lastSeen:Date.now(),tut:{}};
-  renderHead(); renderList(); coachSync(); toast("Wiped.");
+  S = freshState();
+  renderHead(); renderList(true); renderSheet(true); coachSync(); toast("Wiped.");
+  closeMenus();
 };
 window.addEventListener("beforeunload", save);
 
@@ -2781,25 +2877,93 @@ function syncProfileDot(){
   if(dot) dot.style.display = Object.keys(S.ach).length > achSeen ? "block" : "none";
 }
 
-const profileEl = $("profile"), profileBtn = $("profileBtn");
-function closeProfile(){
-  profileEl.classList.remove("open");
-  profileBtn.setAttribute("aria-expanded", "false");
-}
-profileBtn.onclick = e => {
-  e.stopPropagation();
-  const open = profileEl.classList.toggle("open");
-  profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
-  if(open){
+/* Both nav menus behave the same way, so they are wired the same way:
+   one open at a time, click-away and Escape close them, and clicks inside
+   never bubble out to the close handler. */
+const MENUS = [
+  {el:$("profile"), btn:$("profileBtn"), panel:$("profilePanel"), onOpen(){
     renderProfileAch(); renderProfile();
     achSeen = Object.keys(S.ach).length;   // opening it clears the dot
     syncProfileDot();
-  }
+  }},
+  {el:$("opts"), btn:$("optsBtn"), panel:$("optsPanel"), onOpen(){
+    // Fill the box with the current save so "copy out" is one gesture.
+    $("saveText").value = JSON.stringify(S);
+    $("ioNote").textContent = "";
+  }}
+];
+
+function closeMenus(except){
+  MENUS.forEach(m=>{
+    if(m === except) return;
+    m.el.classList.remove("open");
+    m.btn.setAttribute("aria-expanded", "false");
+  });
+}
+
+MENUS.forEach(m=>{
+  m.btn.onclick = e => {
+    e.stopPropagation();
+    const open = !m.el.classList.contains("open");
+    closeMenus(m);
+    m.el.classList.toggle("open", open);
+    m.btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if(open) m.onOpen();
+  };
+  m.panel.addEventListener("click", e => e.stopPropagation());
+});
+addEventListener("click", () => closeMenus());
+addEventListener("keydown", e => { if(e.key === "Escape") closeMenus(); });
+
+/* ---------- save in and out ----------
+   For anyone who would rather not sign in: the save is small enough to
+   live in a text box, and load() already validates every field, so text
+   pasted back in is treated exactly as sceptically as anything read from
+   localStorage. */
+function ioSay(msg){ $("ioNote").textContent = msg; }
+
+$("expBtn").onclick = () => {
+  const box = $("saveText");
+  box.value = JSON.stringify(S);
+  box.select();
+  // execCommand is deprecated but still the only copy that works without a
+  // permission prompt on a file:// page, so it is the fallback, not the plan.
+  navigator.clipboard?.writeText(box.value)
+    .then(()=> ioSay("Copied to your clipboard."))
+    .catch(()=>{ try{ document.execCommand("copy"); ioSay("Copied."); }
+                 catch(e){ ioSay("Select the text above and copy it."); } });
 };
-// Click-away and Escape both close it, and clicks inside must not.
-$("profilePanel").addEventListener("click", e => e.stopPropagation());
-addEventListener("click", () => { if(profileEl.classList.contains("open")) closeProfile(); });
-addEventListener("keydown", e => { if(e.key === "Escape") closeProfile(); });
+
+$("dlBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify(S, null, 2)], {type:"text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "msp-tycoon-save-" + new Date().toISOString().slice(0,10) + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  ioSay("Downloaded.");
+};
+
+$("impBtn").onclick = () => {
+  const raw = $("saveText").value.trim();
+  if(!raw) return ioSay("Paste a save into the box first.");
+  let parsed;
+  try{ parsed = JSON.parse(raw); }
+  catch(e){ return ioSay("That is not a save file — it will not parse."); }
+  if(!parsed || typeof parsed !== "object" || Array.isArray(parsed)){
+    return ioSay("That is not a save file.");
+  }
+  if(!confirm("Load this save?\n\nIt replaces the game in this browser.")) return;
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(parsed)); }
+  catch(e){ return ioSay("This browser will not let the game save."); }
+  load();
+  renderHead(); renderList(true); renderSheet(true); checkAchievements();
+  ioSay("Loaded.");
+  toast("Save loaded.");
+};
 
 /* ---------- the one and only game loop ---------- */
 let last = Date.now();
