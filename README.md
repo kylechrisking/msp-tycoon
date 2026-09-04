@@ -187,6 +187,21 @@ is never one run, it is the difference between two. The bot is not a
 model of a person: it is at the keyboard for every second and it never
 misses. Read it as the ceiling a system allows.
 
+`tools/fuzz.js` is the other half. The bot plays *well*, which is the
+wrong instrument for finding bugs — a sensible player never does the
+thing that breaks a game. The fuzzer fires every legal action in any
+order, including the ones nobody would choose (selling a company with
+nothing in it, remediating debt that does not exist, standing down an
+incident never declared), and asserts after each one that the economy is
+still finite, non-negative and self-consistent. A second mode renders
+every panel after every action and reads back what the UI tried to write,
+which is how a throwing store tooltip was caught.
+
+`tools/checks.js` holds the invariants — nineteen of them, most written
+for a bug that had already shipped. Each is verified by mutation:
+reintroducing the bug it covers, in a copy of the source, makes exactly
+that check fail and no other. A check that cannot fail is not a check.
+
 ## Status
 
 Playable, and now measured rather than guessed. A bot plays full runs

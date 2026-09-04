@@ -1490,6 +1490,29 @@ function rateOf(def){
   });
   return r * levelMult(def.id) * repMult();
 }
+/* What hiring one more of a tier actually adds, measured by asking
+   rateOf() with the extra copy in place.
+
+   Both the store row and the tooltip used to compute this as
+   `d.rate * repMult()`, which quietly ignored the upgrade that doubles
+   this line and any training levels on it. A Help Desk Tech with
+   Knowledge Base bought was advertised at half what it earns, and
+   "pays for itself in" -- the number the tooltip exists to provide, and
+   the one that actually decides a purchase -- was overstated by the same
+   factor, on every tier with a doubler. */
+function marginalStaff(d){
+  const before = rateOf(d);
+  S.staff[d.id] = c(d.id) + 1;
+  const after = rateOf(d);
+  S.staff[d.id] = c(d.id) - 1;
+  if(!S.staff[d.id]) delete S.staff[d.id];
+  return after - before;
+}
+
+// The reputation bonus as a percentage, for display. Never hardcode the
+// 2: The Rolodex makes it 3, and repMult() is the only thing that knows.
+const repBonusPct = () => Math.round((repMult() - 1) * 1000) / 10;
+
 const baseRate  = () => STAFF.reduce((s,d)=>s + rateOf(d), 0) + clientBonusRate();
 // What the game actually pays out: base production, times whatever
 // escalated tickets are currently running.
@@ -1740,7 +1763,7 @@ function renderList(force){
       if(unlocked){
         // There is no hover on a phone, so the numbers the tooltip carries
         // have to live in the row itself at that size.
-        const each = d.rate * repMult();
+        const each = marginalStaff(d);
         const back = each > 0 ? Math.ceil(cost / each) : 0;
         b.innerHTML =
           '<div class="item-ic">' + d.icon + '</div>' +
@@ -1779,7 +1802,7 @@ function renderList(force){
         (S.repEarned > S.reputation
           ? '<div class="pc-row"><span>Signed to clients</span><b>' + fmt(S.repEarned - S.reputation) + '</b></div>'
           : '') +
-        '<div class="pc-row"><span>Current bonus</span><b>+' + (S.reputation*2) + '%</b></div>' +
+        '<div class="pc-row"><span>Current bonus</span><b>+' + repBonusPct() + '%</b></div>' +
         '<div class="pc-row"><span>Lifetime revenue</span><b>' + money(S.lifetime) + '</b></div>' +
         '<div class="pc-row"><span>Exit is worth</span><b class="' + (p>0?"pc-good":"") + '">' + fmt(p) + ' rep</b></div>' +
       '</div>' +
@@ -2209,7 +2232,15 @@ ticketEl.addEventListener("pointerdown", e=>{
 document.addEventListener("keydown", e=>{
   if(e.code !== "Space") return;
   const t = e.target;
-  if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+  if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  // Space is how a keyboard activates a focused control, and this handler
+  // used to preventDefault() on every one of them -- so tabbing to "Skip
+  // the tour", a store row or a tab and pressing space closed a ticket
+  // instead of pressing the button, with no way to reach it at all
+  // without a mouse. The ticket is the one button that wants this
+  // handler, because it is driven by pointer events and has no click of
+  // its own for the browser to fire.
+  if(t && t !== ticketEl && t.closest && t.closest("button, a, [role=button], select")) return;
   e.preventDefault();
   if(e.repeat) return;
   closeTicket.apply(null, ticketCentre());
@@ -2234,7 +2265,18 @@ window.addEventListener("blur", ()=>{ stopHold(); ticketEl.classList.remove("hel
 let lastTouchEnd = 0;
 document.addEventListener("touchend", e=>{
   const now = Date.now();
-  if(now - lastTouchEnd <= 350) e.preventDefault();
+  const t = e.target;
+  const onTicket = !!(t && t.closest && t.closest("#ticketWrap"));
+  const onControl = !!(t && t.closest && t.closest("button, a, input, select, textarea"));
+  // Never eat a tap on a control that is not the ticket. Preventing the
+  // default on touchend also cancels the click the browser would have
+  // synthesised, and buying is a burst activity -- hiring twice inside
+  // 350ms is an ordinary thing to do, and the second purchase was simply
+  // being dropped on every phone. The ticket is exempt from the
+  // exemption: it is the most-tapped thing on the screen, it is driven by
+  // pointer events rather than clicks, so nothing is lost by suppressing
+  // its click, and it is exactly where double-tap zoom would fire.
+  if((onTicket || !onControl) && now - lastTouchEnd <= 350) e.preventDefault();
   lastTouchEnd = now;
 }, {passive:false});
 
@@ -2401,17 +2443,27 @@ const tipEl = $("tip");
 let tipFor = null;
 
 function pctOfIncome(r){
-  const t = totalRate();
+  // Against baseRate(), not totalRate(). The numerator is a rateOf(),
+  // which carries upgrades, training and reputation but not escalation
+  // buffs, technical debt or incident mode -- totalRate() carries all
+  // three. Dividing one by the other meant that during a x7 All Hands
+  // every share in the game read as a seventh of itself, and the tiers
+  // stopped summing to anything.
+  const t = baseRate();
   return t > 0 ? Math.round((r / t) * 100) : 0;
 }
 
 function staffTip(d, i, unlocked){
-  const own = c(d.id), cost = costOf(d), each = d.rate * repMult();
+  const own = c(d.id), cost = costOf(d), each = marginalStaff(d);
   const mine = rateOf(d);
   if(!unlocked){
+    // The first tier has nothing above it and is never locked, so i is
+    // always >= 1 here in practice -- but reading STAFF[-1].name would
+    // throw rather than degrade, and a tooltip is not worth a crash.
+    const above = STAFF[i-1];
     return '<div class="tip-n">' + d.name + '</div>' +
       '<div class="tip-f">locked</div>' +
-      '<div class="tip-r"><span>Unlocks when</span><b>1 ' + STAFF[i-1].name + '</b></div>' +
+      (above ? '<div class="tip-r"><span>Unlocks when</span><b>1 ' + above.name + '</b></div>' : '') +
       '<div class="tip-r"><span>Would cost</span><b>' + money(cost) + '</b></div>' +
       '<div class="tip-r"><span>Would earn</span><b>$' + rateStr(each) + '/s each</b></div>' +
       '<div class="tip-note">Every tier is worth more per hire than the one above it, but costs more. Hire the cheapest thing you can afford and you will rarely be far wrong.</div>';
@@ -2429,7 +2481,7 @@ function staffTip(d, i, unlocked){
       : '') +
     '<div class="tip-r"><span>Next one costs</span><b class="' + (S.cash >= cost ? "good" : "warn") + '">' + money(cost) + '</b></div>' +
     '<div class="tip-r"><span>Pays for itself in</span><b>' + (isFinite(payback) ? Math.ceil(payback) + "s" : "--") + '</b></div>' +
-    (S.reputation > 0 ? '<div class="tip-note">Includes your +' + (S.reputation*2) + '% reputation bonus.</div>' : '');
+    (S.reputation > 0 ? '<div class="tip-note">Includes your +' + repBonusPct() + '% reputation bonus.</div>' : '');
 }
 
 /* Run fn() as though this upgrade were already owned, then put the state
@@ -2858,7 +2910,10 @@ function renderSheet(force){
   if(!force && sig === sheetSig) return;
   sheetSig = sig;
 
-  const total = totalRate();
+  // Shares are computed against this, so it is baseRate() for the same
+  // reason pctOfIncome() uses it: the per-tier numbers it is divided into
+  // do not carry buffs, debt or incident, and it must not either.
+  const total = baseRate();
   const owned = STAFF.filter(d=>c(d.id) > 0);
   const tools = UPGRADES.filter(u=>S.upgrades[u.id]);
   const signed = CLIENTS.filter(cl=>S.clients[cl.id]);

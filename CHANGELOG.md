@@ -10,6 +10,40 @@ here come out of `tools/sim.html` and can be reproduced by running it.
 ## [Unreleased]
 
 ### Fixed
+- **The store quoted the wrong output for half the roster.** Both the hover
+  tooltip and the phone row computed a tier's per-copy rate as
+  `d.rate * repMult()`, which ignores the upgrade that doubles that line and
+  any training levels on it. A Help Desk Tech with Knowledge Base bought was
+  advertised at half what it earns, and "pays for itself in" — the number
+  the tooltip exists to provide, and the one that actually decides a
+  purchase — was overstated by the same factor on every tier with a doubler.
+  Both now measure the real marginal hire.
+- **"Share of payroll" was divided by the wrong number.** The numerator is a
+  `rateOf()`, which carries upgrades, training and reputation; the
+  denominator was `totalRate()`, which also carries escalation buffs,
+  technical debt and incident mode. During a x7 All Hands every share in the
+  game read as a seventh of itself and the tiers stopped summing to
+  anything. Both the tooltip and the company sheet now divide by
+  `baseRate()`.
+- **The reputation bonus was hardcoded at 2%.** The sell card and the staff
+  tooltip both printed `S.reputation * 2`, so The Rolodex — whose entire
+  effect is making a point worth 3% instead of 2% — changed the income and
+  not the number describing it.
+- **Space could not activate any button.** The hold-to-work handler called
+  `preventDefault()` on every Space keypress outside a text field, so a
+  keyboard player tabbing to "Skip the tour", a store row or a tab pressed
+  space and closed a ticket instead. The ticket, which is driven by pointer
+  events and has no click of its own, stays exempt.
+- **Double-tapping a store row dropped every second purchase on a phone.**
+  The double-tap-to-zoom backstop called `preventDefault()` on any second
+  `touchend` within 350ms, document-wide — and preventing the default on
+  touchend also cancels the click the browser would have synthesised.
+  Hiring twice in quick succession is ordinary; the second hire simply did
+  not happen. The suppressor now leaves controls alone and still covers the
+  ticket, where the gesture actually is.
+- A locked staff tooltip read `STAFF[i-1].name` with no guard. Unreachable
+  today, since the first tier is never locked, but it would have thrown
+  rather than degraded.
 - **A corrupt or edited save could poison the economy for good.** Options
   has a paste-a-save box, so the loader is reachable with anything that
   parses as JSON, and two classes of field went through it unchecked. Staff
@@ -71,13 +105,21 @@ here come out of `tools/sim.html` and can be reproduced by running it.
 
 ### Added
 
+- **A fuzzer, `tools/fuzz.js`**, that plays badly on purpose. The bot plays
+  well, which is the wrong instrument for finding bugs -- a sensible player
+  never does the thing that breaks a game. This fires every legal action in
+  any order, including the ones nobody would choose, and asserts after each
+  one that the economy is still finite, non-negative and self-consistent. A
+  second mode renders every panel after each action and reads back what the
+  UI tried to write, which is how the store tooltip was caught throwing.
+  750,000 random actions currently pass clean.
 - **A simulator, in `tools/`.** `harness.js` fetches `index.html`, extracts
   its one `<script>`, and runs it against a stub DOM on a virtual clock;
   `bot.js` plays by calling the same functions the buttons do; `sim.html` is
   the runner. It holds no copy of the economy, so it cannot fall out of date
   with the game. Every system is switchable, because the useful number is
   never one run — it is the difference between two.
-- **An invariant suite, `tools/checks.js`**, run from the same page. Sixteen
+- **An invariant suite, `tools/checks.js`**, run from the same page. Nineteen
   checks against the real game, most of them written for a bug that had
   already shipped: the reputation-squared click, the market farm, the
   tooltip overstatement, what an exit keeps, that a save survives a round

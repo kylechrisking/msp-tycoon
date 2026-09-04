@@ -23,6 +23,12 @@
  *   the whole of "time passing".
  */
 
+/* Where the UI's rendered text is collected, when anyone is listening.
+ * Off by default: the bot renders a million times and has no use for it. */
+let SINK = null;
+export function recordRenders() { SINK = []; return SINK; }
+export function stopRecording() { const s = SINK; SINK = null; return s || []; }
+
 /* A stub node. Anything can be read off it, called on it, or assigned to
  * it; nothing throws and nothing is rendered. Reads return the stub
  * itself, which is truthy -- so `if(el)` guards take the branch a real
@@ -44,7 +50,16 @@ function stubNode() {
       if (p === "length") return 0;
       return (store[p] = stubNode());
     },
-    set(_t, p, v) { store[p] = v; return true; },
+    set(_t, p, v) {
+      // Record what the UI writes. Nothing reads it back -- design rule 2 --
+      // but the fuzzer scans it, because a formatter that renders "$NaN"
+      // into a panel is a real bug the economy invariants cannot see.
+      if (SINK && (p === "textContent" || p === "innerHTML" || p === "value")) {
+        SINK.push(String(v));
+      }
+      store[p] = v;
+      return true;
+    },
     has() { return true; },
     apply() { return stubNode(); },
     construct() { return stubNode(); }
@@ -141,7 +156,9 @@ const EXPORTS = `{
   debtGate, debtCount, debtMult, debtTick, remediate,
   escGate, escInterval, pickEscalation, buffActive, buffMult,
   invoiceValue, claimEscalation,
-  fmt, money, rateStr, scale, upgradeTip, withUpgrade,
+  fmt, money, rateStr, scale, upgradeTip, withUpgrade, pctOfIncome, marginalStaff, repBonusPct,
+  renderHead, renderList, renderSheet, renderBuffs, renderProfile, renderProfileAch,
+  syncProfileDot, staffTip, clientTip, coachSync,
   PRESTIGE_MIN, LEVEL_MAX, LEVEL_STEP, DEBT_MAX, DEBT_DRAG, DEBT_YIELD,
   DEBT_EVERY, INCIDENT_MAX, INCIDENT_GAIN, BREACH_SECS, BREACH_MULT,
   ESC_LIFETIME_MS, ESC_MIN_MS, ESC_MAX_MS, MKT_MS, MKT_BASE,

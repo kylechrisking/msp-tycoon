@@ -153,6 +153,79 @@ export const CHECKS = [
     }
   },
   {
+    name: "the store quotes what a hire really earns",
+    why:
+      "Both the tooltip and the phone row computed a tier's per-copy output " +
+      "as `d.rate * repMult()`, which ignores the upgrade that doubles that " +
+      "line and any training levels on it. A tier with its doubler bought was " +
+      "advertised at half what it earns, and 'pays for itself in' -- the " +
+      "number the tooltip exists to provide -- was overstated to match.",
+    run(g) {
+      g.S.staff.helpdesk = 6; g.S.staffTotal = 6;
+      g.S.upgrades.kb = true;          // Knowledge Base: Help Desk output x2
+      g.S.levels.helpdesk = 4;         // +40%
+      g.S.reputation = 25;
+      g.S.cash = 1e6;
+      const d = g.STAFF[0];
+      // The truth: what the roster gains from one more of them.
+      const before = g.totalRate();
+      g.buyStaff(d);
+      const truth = g.totalRate() - before;
+      if (!(truth > 0)) throw new Error("the check failed to hire anyone");
+      const quoted = "$" + g.rateStr(truth);
+      const tip = g.staffTip(d, 0, true);
+      if (!tip.includes(quoted + "/s")) {
+        throw new Error(`tooltip does not quote the real per-hire rate ${quoted}/s`);
+      }
+      const payback = Math.ceil(g.costOf(d) / truth);
+      if (!tip.includes(payback + "s")) {
+        throw new Error(`tooltip does not quote the real payback of ${payback}s`);
+      }
+    }
+  },
+  {
+    name: "payroll shares still add up during an escalation",
+    why:
+      "'Share of payroll' divided a rateOf() -- which carries upgrades, " +
+      "training and reputation -- by totalRate(), which also carries " +
+      "escalation buffs, debt and incident mode. During a x7 All Hands, " +
+      "every share in the game read as a seventh of itself.",
+    run(g) {
+      g.S.cash = 1e9;
+      g.S.staff.helpdesk = 20; g.S.staff.sysadmin = 5; g.S.staffTotal = 25;
+      const sum = () => g.STAFF.reduce((s, d) => s + (g.c(d.id) ? g.pctOfIncome(g.rateOf(d)) : 0), 0);
+      const quiet = sum();
+      if (Math.abs(quiet - 100) > 2) throw new Error(`shares sum to ${quiet}% with nothing running`);
+      // Now put a x7 on the board and an incident behind it.
+      g.claimEscalation(g.ESCALATIONS.find(e => e.id === "allhands"));
+      g.S.upgrades.siem = true;
+      g.escalateIncident();
+      if (g.buffMult("rateMult") === 1) throw new Error("the buff did not take");
+      const loud = sum();
+      if (Math.abs(loud - 100) > 2) {
+        throw new Error(`shares sum to ${loud}% during a x${g.buffMult("rateMult")} buff`);
+      }
+    }
+  },
+  {
+    name: "the reputation bonus is never hardcoded at 2%",
+    why:
+      "The sell card and the staff tooltip both printed `S.reputation * 2`, " +
+      "so buying The Rolodex -- whose entire effect is making a point worth " +
+      "3% instead of 2% -- changed the income and not the number claiming to " +
+      "describe it.",
+    run(g) {
+      g.S.reputation = 50;
+      g.S.staff.helpdesk = 3; g.S.staffTotal = 3;
+      g.S.repUp.rolodex = true;
+      const realPct = Math.round((g.repMult() - 1) * 1000) / 10;   // 150%
+      if (Math.abs(realPct - 150) > 0.01) throw new Error(`Rolodex maths changed: ${realPct}%`);
+      const tip = g.staffTip(g.STAFF[0], 0, true);
+      if (tip.includes("+100%")) throw new Error("staff tooltip still quotes the 2% rate with Rolodex owned");
+      if (!tip.includes("+" + realPct + "%")) throw new Error(`staff tooltip does not quote +${realPct}%`);
+    }
+  },
+  {
     name: "an exit clears the run and keeps what is permanent",
     why: "Prestige is the one operation that deletes things. What it keeps is the game.",
     run(g) {
