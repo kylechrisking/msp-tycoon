@@ -20,7 +20,9 @@ No build step, no dependencies. Open:
 index.html
 ```
 
-That is the whole game — one self-contained HTML file.
+That is the whole game — one self-contained HTML file. `tools/` is
+development scaffolding (see Simulating it) and `CHANGELOG.md` records what
+has changed; neither ships with the game.
 
 Accounts and cloud saves are optional and live entirely on the host. The
 game calls `./api.php` for them and falls back to "playing signed out"
@@ -73,7 +75,11 @@ staff; staff close tickets while you are away.
 - **A contracts market**, unlocked by the vCIO, on a mean-reverting
   random walk. Positions are stored as cash invested and the price it
   went in at, never as units, so the market is as relevant at $10M/s as
-  at $10/s.
+  at $10/s. Selling returns the stake as cash but books only the profit
+  as revenue: crediting the whole position through `earn()`, as it first
+  did, meant buying and immediately selling at an unchanged price left
+  cash where it started while adding 10% of the balance to lifetime
+  revenue — an unbounded reputation farm for mashing two buttons.
 - **Incident mode** is opt-in risk: three stages, each paying 35% more
   while piling up debt faster and turning escalated tickets hostile. A
   hostile one still pays if you catch it and halves your income for a
@@ -120,7 +126,7 @@ server.
 
 ## Design rules
 
-Four constraints, each one a bug that actually shipped:
+Five constraints, each one a bug that actually shipped:
 
 1. **One interval owns the simulation.** The old build ran two, and the
    second corrupted the score every tick — it read `this.totalPassiveProd`
@@ -140,6 +146,15 @@ Four constraints, each one a bug that actually shipped:
    signing a client lowered the subtrahend and the next exit returned the
    same points at no extra revenue. Payouts settle against what has been
    claimed; only the held balance moves when you spend.
+5. **A multiplier is applied exactly once.** `clickValue()` multiplied its
+   whole result by `repMult()`, but its income share is `totalRate()`,
+   which `rateOf()` has already multiplied by `repMult()`. A click was
+   therefore worth reputation *squared* — at 30,000 reputation, one click
+   paid for four minutes of the entire company. Since reputation is drawn
+   from the square root of lifetime revenue, and lifetime revenue was
+   growing as reputation squared, the loop fed itself: the economy was
+   exponential rather than polynomial, and that, not a missing cap, was
+   the runaway. Reputation now multiplies the flat part only.
 
 The practical upshot of (3): staff, upgrades and pricing can be changed
 freely without invalidating anyone's save. Saves from before (4) carry no
@@ -150,25 +165,92 @@ static config. A save that milked the old refund can end up owed less
 than nothing; the payout floors at zero, so it earns none until lifetime
 revenue catches up rather than having anything clawed back.
 
+## Simulating it
+
+`tools/sim.html`, served over http from the repo root, plays the game
+with a bot and prints the tables the balance claims above come out of.
+It has no copy of the economy: `tools/harness.js` fetches `index.html`,
+pulls out its one `<script>`, and runs it against a stub DOM on a virtual
+clock, so every number comes from the same `rateOf()`, `costOf()` and
+`pendingRep()` the page ships. `tools/bot.js` then presses the same
+functions the buttons do. A balance change that is not reflected in the
+simulator is impossible, because there is nothing there to fall out of
+sync with.
+
+```
+py -m http.server 8765          # from the repo root
+                                # then open /tools/sim.html
+```
+
+Every system is switchable, which is the point — the interesting number
+is never one run, it is the difference between two. The bot is not a
+model of a person: it is at the keyboard for every second and it never
+misses. Read it as the ceiling a system allows.
+
 ## Status
 
-Playable, being tuned. Balance numbers are provisional, but the client
-curve and the core loop are simulated rather than guessed -- a bot plays
-full runs against the real game functions, and the numbers quoted above
-come out of it.
+Playable, and now measured rather than guessed. A bot plays full runs
+against the real game functions, and every number quoted here comes out
+of it.
+
+Where a perfect bot (five clicks a second, catches everything, exits on a
+tight trigger) gets to, by hour, with all systems engaged:
+
+| hour | lifetime | milestone |
+|-----:|---------:|-----------|
+| 0.16 | $1M      | first exit |
+| 2.4  | $1B-ish  | AI Triage |
+| 4.0  | —        | every client signed |
+| 6.0  | $10T     | every upgrade bought, 33 of 34 achievements |
+| 55   | $728Qi   | 115 exits, still a legible number |
+
+A casual profile — one click a second, catching about a third of
+escalations, patient about exits, market and incident mode left alone —
+takes 38 minutes to the first exit, 19 hours to the last upgrade and the
+full client roster, and finishes a day with 30 of 34 achievements. The
+core loop on its own, with debt, training, market and incident all
+ignored, is $2.9B and 10 of 19 upgrades in that same day, which is the
+gap those systems are there to fill.
+
+What the four newer systems are actually worth, measured against the same
+seed at six hours with the core loop as 1.0x:
+
+| system | lifetime |
+|--------|---------:|
+| debt, held to the cap then paid | 3.3x |
+| debt, remediated on sight       | 3.0x |
+| incident mode at stage 3        | 8.7x |
+| the contracts market            | 1.0x |
+| all of them together            | 16,800x |
+
+Three things that reads out:
+
+- **Debt is a genuinely close call**, which is what it was designed to
+  be. Holding to the cap beats paying on sight by 11% — the bank returns
+  1.25x what the drag took, but the income you did not have while it sat
+  there is income you did not compound. Never paying it down at all is
+  1.0x, so the mechanic is not free money in either direction.
+- **Incident mode is the strongest system in the game** and stronger than
+  its own description: +35% a stage reads as a third, but three stages
+  compounding through a prestige loop is nearly 9x over six hours.
+  Whether that is too strong for something this cheap to switch on is the
+  open balance question.
+- **The market is worth nothing to a bot that prestiges hard**, because
+  `marketGate()` wants five vCIOs and an exit wipes them. It is a
+  mechanic for players who sit on a run, not for players who cycle it.
 
 Known gaps:
 
-- **The economy runs away past about 55 simulated hours.** A bot playing
-  perfectly and prestiging on a tight trigger reaches `Infinity` and
-  `fmt()` degrades to `10000000Dc`. No human gets near it, and the sqrt
-  on the reputation cap is not enough to hold it, but there is no soft
-  cap anywhere and eventually there should be.
-- **The new systems have not been simulated against each other.** The
-  client curve was, and the core loop still paces as documented with
-  everything in place. But the bot does not open the market, declare an
-  incident, spend training credits or let debt accrue, so the combined
-  effect of four new multipliers on a long run is unmeasured.
-- The upgrade and achievement tails are still shape rather than
-  measurement. Upgrades past AI Triage and the achievements above $1B
-  lifetime extend the existing curves by eye. Reachable is not tuned.
+- **Fully Certified is not realistically reachable.** Training levels
+  cost 1, 2, 3… credits, so a single tier at level 10 is 55 credits, and
+  credits accrue one per six hours — 330 hours of wall clock, spending
+  nothing on any other tier. It is the only achievement the bot never
+  unlocks, and it is gated on the calendar rather than on play.
+- **The bot plays one shape of game.** It clicks at a fixed rate and buys
+  on payback, so it says what the systems allow, not what they feel like.
+  Hold-to-work, in particular, is invisible to it.
+- The upgrade tail is now measured rather than eyeballed, but it is
+  measured against a bot: Tuck-In Acquisition at $60B lands at hour 6 for
+  a bot and hour 19 for a casual profile, and whether hour 19 is a good
+  place for the last thing in the game to arrive is a judgement call, not
+  a number.

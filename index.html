@@ -114,14 +114,37 @@
 .item-x{display:none;font-family:var(--mono);font-size:10.5px;color:var(--accent);margin-top:3px}
 .item.locked .item-x{display:none!important}
 
-@media (max-width:820px){
+/* 900px, matching the layout: that is where the store becomes a bottom
+   sheet, and the docking placeCoach() does only makes sense against a
+   store that is down there. These rules used to sit in the 820px block
+   below with the JS asking for 900, so between the two the panel was
+   docked as if the store were a bottom sheet while being styled as if it
+   were not -- a 56px box, no scroll rule, and a step's text spilling
+   straight over the store. Whatever number this is, placeCoach()'s
+   mobileQuery has to be the same one. */
+@media (max-width:900px){
   /* top/bottom are set by placeCoach() itself on a phone -- see the JS.
      Anchoring by a fixed bottom offset, as this used to, let a step with
      more text than usual grow upward into the ticket it was supposed to
      be pointing near. The ring does the pointing on a phone; this panel
-     just needs to stay out of the way. */
-  #coach{width:auto;left:12px!important;right:12px;max-height:40vh;overflow-y:auto}
+     just needs to stay out of the way.
+
+     A column with a scrolling middle, so the skip button cannot be the
+     part that falls below the fold. On the shortest phones a step's text
+     still does not fit the band between the ticket and the store; when
+     something has to scroll it should be the prose, not the only control
+     on the panel. */
+  #coach{
+    width:auto;left:12px!important;right:12px;max-height:40vh;
+    overflow:hidden;display:flex;flex-direction:column;padding:12px 13px;
+  }
+  #coach .co-k,#coach .co-h,#coach .co-f{flex:0 0 auto}
+  #coach .co-b{overflow-y:auto;min-height:0;font-size:12.5px;line-height:1.5}
+  #coach .co-f{margin-top:10px}
   #coach .co-arrow{display:none}
+}
+
+@media (max-width:820px){
   #tip{display:none}      /* no hover on touch */
   .item-x{display:block}  /* so the row carries the numbers instead */
 }
@@ -1144,7 +1167,15 @@ function mktSell(g){
   const v = mktValue(g.id);
   if(v <= 0) return;
   const profit = v - mktInv(g.id);
-  earn(v);
+  // The stake comes back as cash but is not revenue -- only the profit is.
+  // earn() used to be handed the whole position, which meant buying and
+  // immediately selling at an unchanged price left cash exactly where it
+  // started while adding 10% of the balance to lifetime revenue. With no
+  // cooldown on either button, that was an unbounded reputation farm
+  // (pendingRep() reads lifetime) and free progress on every
+  // lifetime-revenue achievement, for mashing two buttons.
+  S.cash += v;
+  if(profit > 0) S.lifetime += profit;
   S.mkt.inv[g.id] = 0;
   S.mkt.entry[g.id] = mktPrice(g.id);
   if(profit > 0) S.mktProfit = (S.mktProfit || 0) + profit;
@@ -1468,9 +1499,19 @@ function clickValue(){
   let v = 1;
   UPGRADES.forEach(u=>{ if(S.upgrades[u.id] && u.kind === "click") v *= u.mult; });
   // Clicking stays relevant: it scales with a slice of passive income.
+  //
+  // Reputation multiplies the flat part only. The income share already
+  // carries it -- rateOf() applies repMult() to every staff line -- and
+  // multiplying the sum by it again made a click worth reputation
+  // *squared*. That is the whole of the runaway the economy used to have:
+  // click income growing as rep^2 while reputation itself is drawn from
+  // the square root of lifetime revenue is a loop that feeds itself, and
+  // a bot playing perfectly reached 1e114 inside eight hours. Linear in
+  // reputation, it grows like t^2 instead and stays a number.
+  //
   // Floored to whole cents so a "double click value" upgrade reads as
   // exactly double ($2.00) instead of $2.005 rounding up to $2.01.
-  return Math.floor((v + totalRate() * 0.05) * repMult() * buffMult("clickMult") * 100) / 100;
+  return Math.floor((v * repMult() + totalRate() * 0.05) * buffMult("clickMult") * 100) / 100;
 }
 
 function pendingRep(){
@@ -2358,9 +2399,22 @@ function staffTip(d, i, unlocked){
     (S.reputation > 0 ? '<div class="tip-note">Includes your +' + (S.reputation*2) + '% reputation bonus.</div>' : '');
 }
 
+/* Run fn() as though this upgrade were already owned, then put the state
+   back. The store's job is to price a purchase honestly, and the only
+   way to be sure of the answer is to ask the same functions that will
+   produce it after the click. Restores in a finally so a throw inside
+   fn() cannot leave the player owning an upgrade they did not buy. */
+function withUpgrade(u, fn){
+  const had = S.upgrades[u.id];
+  S.upgrades[u.id] = true;
+  try { return fn(); }
+  finally { if(!had) delete S.upgrades[u.id]; }
+}
+
 function upgradeTip(u){
   let effect;
-  if(u.kind === "click")     effect = "Click value x" + u.mult;
+  // "Base", because the income share of a click is not multiplied.
+  if(u.kind === "click")     effect = "Base click value x" + u.mult;
   else if(u.kind === "global")   effect = "All staff output x" + u.mult;
   else if(u.kind === "holdspeed") effect = "Hold speed x" + u.mult;
   else if(u.kind === "staff"){
@@ -2368,15 +2422,28 @@ function upgradeTip(u){
     effect = (t ? t.name : u.target) + " output x" + u.mult;
   } else effect = "Unlocks holding to close tickets";
 
-  // Show what it does to the number the player is watching right now.
+  // Show what it does to the number the player is watching right now --
+  // measured by asking the game with the upgrade owned, not by
+  // multiplying the number on screen by u.mult.
+  //
+  // Multiplying overstated two of the three. A click upgrade scales only
+  // the flat part of clickValue(), not the share that comes from staff
+  // income, so "x2" on a $6.00 click was never $12.00 once there was a
+  // payroll. A global upgrade scales staff output, but totalRate() also
+  // carries client contracts, which are flat by design and untouched by
+  // it. Both promised more than the purchase could deliver, on the one
+  // screen whose whole job is telling the truth about a price.
   let delta = "";
   if(u.kind === "click"){
-    delta = money(clickValue()) + " -> " + money(clickValue() * u.mult) + " per click";
+    delta = money(clickValue()) + " -> " + money(withUpgrade(u, clickValue)) + " per click";
   } else if(u.kind === "global"){
-    delta = "$" + rateStr(totalRate()) + "/s -> $" + rateStr(totalRate() * u.mult) + "/s";
+    delta = "$" + rateStr(totalRate()) + "/s -> $" + rateStr(withUpgrade(u, totalRate)) + "/s";
   } else if(u.kind === "staff"){
     const t = STAFF.find(s=>s.id===u.target);
-    if(t && c(t.id) > 0) delta = "$" + rateStr(rateOf(t)) + "/s -> $" + rateStr(rateOf(t) * u.mult) + "/s from them";
+    if(t && c(t.id) > 0){
+      delta = "$" + rateStr(rateOf(t)) + "/s -> $" +
+              rateStr(withUpgrade(u, ()=>rateOf(t))) + "/s from them";
+    }
   }
 
   return '<div class="tip-n">' + u.name + '</div>' +
@@ -2563,6 +2630,11 @@ function coachSync(){
   placeCoach(at, s.side);
 }
 
+/* 900px: the width at which the store becomes a bottom sheet, which is
+   the only layout the docking below makes sense against. The panel's own
+   styles used to be written at 820 while this said 900, so between the
+   two it was positioned as a phone and styled as a desktop -- see the
+   comment on the #coach media block. Both numbers move together. */
 const mobileQuery = matchMedia("(max-width:900px)");
 
 function placeCoach(at, side){
@@ -2574,15 +2646,38 @@ function placeCoach(at, side){
   if(mobileQuery.matches){
     const storeEl = document.querySelector(".store");
     const store = storeEl ? storeEl.getBoundingClientRect() : null;
-    const stats = document.querySelector(".stats").getBoundingClientRect();
-    const top = stats.bottom + 10;
-    const maxH = store ? Math.max(56, store.top - 10 - top) : 200;
+    const ticket = $("ticketWrap");
+    const t = ticket ? ticket.getBoundingClientRect() : null;
+    // Dock the bottom edge just above the store and let the panel grow
+    // upward from there.
+    //
+    // This used to anchor the *top* to the stats strip instead, which on
+    // a 375-wide phone leaves a 56px slot for a step that needs 222 --
+    // so every step rendered as its heading and nothing else. The body
+    // text, the "3 more tickets to go" progress and the skip link were
+    // all below the fold of a panel most players would not think to
+    // scroll.
+    //
+    // Growing upward covers the stats strip, which is the cheapest thing
+    // on screen to cover -- the same four numbers are in the company
+    // sheet -- and stops at the middle of the ticket, so the ring doing
+    // the pointing stays visible and the tap target stays big.
+    const floor   = store ? store.top - 10 : innerHeight - 10;
+    const ceiling = t ? t.top + t.height / 2 : 8;
     coachEl.style.left = "";
-    coachEl.style.top = Math.round(top) + "px";
-    coachEl.style.bottom = "auto";
-    coachEl.style.maxHeight = Math.round(maxH) + "px";
+    coachEl.style.top = "auto";
+    coachEl.style.bottom = Math.round(Math.max(0, innerHeight - floor)) + "px";
+    coachEl.style.maxHeight = Math.round(Math.max(120, floor - ceiling)) + "px";
     return;
   }
+  // Clear what the phone branch wrote inline. A window dragged from
+  // phone width up to desktop keeps running through here, and a fixed
+  // panel that still has both a top and a bottom stretches to fill the
+  // gap between them -- while a stale max-height clips the desktop card
+  // to whatever band the phone layout had room for.
+  coachEl.style.bottom = "auto";
+  coachEl.style.maxHeight = "";
+
   const r = at.getBoundingClientRect(), b = coachEl.getBoundingClientRect();
   const gap = 16;
   // Measured on the step it first appears, the panel can still report a
