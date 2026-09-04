@@ -466,6 +466,38 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
 .debt-t{ font-size:13px; color:var(--ink); flex:1 1 auto }
 .debt-t b{ color:var(--crit); font-family:var(--mono) }
 .debt-t span{ display:block; font-size:11px; color:var(--dim); font-family:var(--mono) }
+
+/* Morale. Neutral rather than good-or-bad coloured, because it is the one
+   strip that reads as both: the bar carries the judgement, and it shifts
+   from the warning colour up to the accent as the number climbs. */
+.morale{
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  margin-top:10px; padding:10px 12px; border-radius:10px;
+  background:rgba(255,255,255,.03); border:1px solid var(--line);
+}
+.morale .debt-t b{ color:var(--ink) }
+.mo-bar{
+  flex:0 0 100%; height:4px; border-radius:2px; overflow:hidden;
+  background:rgba(255,255,255,.07); margin-bottom:2px;
+}
+.mo-bar i{
+  display:block; height:100%; width:0; border-radius:2px;
+  background:var(--accent); transition:width .5s ease, background-color .5s ease;
+}
+.morale.low  .mo-bar i{ background:var(--crit) }
+.morale.mid  .mo-bar i{ background:var(--warn) }
+
+/* The wire. Quiet on purpose: it is flavour, and it sits directly above
+   the decorative floor, so it has to read as part of the room rather than
+   as another readout competing with the ones that matter. */
+.wire{
+  margin-top:14px; min-height:2.6em; font-size:12.5px; line-height:1.4;
+  color:var(--dim); font-style:italic;
+  border-left:2px solid var(--line); padding:2px 0 2px 10px;
+}
+@media (prefers-reduced-motion: reduce){
+  .mo-bar i{ transition:none }
+}
 /* Training budget strip. Same shape as the debt strip, opposite colour --
    one is money you are losing, the other money you are being given. */
 .train{
@@ -785,6 +817,21 @@ button{font-family:inherit;color:inherit;border:none;background:none;cursor:poin
       <button class="btn debt-go" id="debtGo" type="button">Pay down &mdash; <span id="debtBank">$0</span></button>
     </div>
 
+    <!-- Morale. Hidden until the first benefit is bought, because until
+         then the number is real but worth nothing, and a strip showing a
+         percentage that does not do anything is just clutter. -->
+    <div class="morale" id="morale" style="display:none">
+      <div class="mo-bar"><i id="moFill"></i></div>
+      <div class="debt-t">
+        <b id="moN">0%</b> morale
+        <span id="moDrag"></span>
+      </div>
+    </div>
+
+    <!-- The wire. Decorative, and deliberately the last thing in the
+         column: it should be readable, never in the way of a button. -->
+    <div class="wire" id="wire" aria-live="off"></div>
+
   </main>
 
   <!-- The company sheet: everything permanent you own, in the middle column.
@@ -929,7 +976,20 @@ const UPGRADES = [
   {id:"rota",      name:"Follow-the-Sun Rota",icon:"🌍", cost:600000000,  kind:"staff",  target:"noc", mult:2, need:()=>c("noc")>=5,          blurb:"Three time zones, one queue. NOC output doubled."},
   {id:"xdr",       name:"Managed XDR",        icon:"🕵️", cost:900000000,  kind:"global", mult:1.5, need:()=>S.staffTotal>=200,   blurb:"Detection someone else stays up for. All staff +50%."},
   {id:"playbook",  name:"Delivery Playbook",  icon:"📕", cost:10000000000, kind:"staff", target:"branch", mult:2, need:()=>c("branch")>=5,    blurb:"Everything the first office learned, written down. Second Branch output doubled."},
-  {id:"tuckin",    name:"Tuck-In Acquisition",icon:"🧩", cost:60000000000, kind:"global", mult:2, need:()=>S.staffTotal>=350,     blurb:"You bought the competition. All staff doubled."}
+  {id:"tuckin",    name:"Tuck-In Acquisition",icon:"🧩", cost:60000000000, kind:"global", mult:2, need:()=>S.staffTotal>=350,     blurb:"You bought the competition. All staff doubled."},
+
+  /* Benefits: the only things that turn morale into money, and the
+     reason to care what your achievements add up to. Each multiplies
+     staff output by 1 + morale * factor, so they are worth their full
+     value at 100% morale and nothing at all at zero -- which is what
+     makes running a permanent stage-three incident a decision instead of
+     free income. Unlocked by achievements earned rather than by payroll,
+     because that is the number they are here to pay out on. */
+  {id:"lunch",     name:"Free Lunch Fridays", icon:"🍕", cost:50000,      kind:"morale", factor:0.15, need:()=>Object.keys(S.ach).length>=8,  blurb:"Nobody stays for the pizza. Everybody notices when it stops."},
+  {id:"pto",       name:"An Actual PTO Policy",icon:"🏖️", cost:800000,    kind:"morale", factor:0.25, need:()=>Object.keys(S.ach).length>=12, blurb:"Unlimited was never the same thing as taken."},
+  {id:"hrbp",      name:"An HR Business Partner", icon:"🧑‍💼", cost:9000000, kind:"morale", factor:0.4, need:()=>Object.keys(S.ach).length>=17, blurb:"Someone whose job is the people rather than the payroll."},
+  {id:"fourday",   name:"The Four-Day Week",  icon:"📅", cost:250000000,  kind:"morale", factor:0.6,  need:()=>Object.keys(S.ach).length>=22, blurb:"The tickets did not notice."},
+  {id:"sharing",   name:"Profit Sharing",     icon:"🥂", cost:5000000000, kind:"morale", factor:0.9,  need:()=>Object.keys(S.ach).length>=27, blurb:"They own a piece of it now. It shows."}
 ];
 
 /* Checked, not stored: an achievement is a pure function of state that is
@@ -975,6 +1035,10 @@ const ACHIEVEMENTS = [
   {id:"reputable",    name:"Reputable",           icon:"⭐", desc:"Earn 50 reputation.",                   check:()=>S.repEarned>=50},
   {id:"legend",       name:"Industry Legend",     icon:"🏆", desc:"Earn 200 reputation.",                  check:()=>S.repEarned>=200},
   {id:"household",    name:"Household Name",      icon:"📣", desc:"Earn 500 reputation.",                  check:()=>S.repEarned>=500},
+  // Both ends of morale, so the tension it creates is something the game
+  // says out loud rather than a number that quietly moves.
+  {id:"nicehere",     name:"Somewhere Nice To Work", icon:"🌱", desc:"Reach 90% morale.",                  check:()=>morale()>=0.9},
+  {id:"utilised",     name:"Fully Utilised",      icon:"🥵", desc:"Run morale to zero with a benefit bought.", check:()=>moraleGate() && morale()<=0},
 ];
 
 function checkAchievements(){
@@ -1279,6 +1343,191 @@ function remediate(){
   renderHead(); renderList(); checkAchievements(); save();
 }
 
+/* ---------- morale ----------
+   Cookie Clicker's milk, and the reason its achievements are play rather
+   than a collection: every one you earn raises milk, and the kitten
+   upgrades turn milk into production. Thirty-six achievements that do
+   nothing is thirty-six pieces of content the game has already written
+   and is not spending.
+
+   Straight milk would have been a counter that only goes up. This one
+   can go down, and that is the whole design. Culture is what the company
+   has earned and keeps -- one share per achievement, permanent. Burnout
+   is what the way you are running it *right now* is costing: technical
+   debt left to rot, and an incident nobody has stood down.
+
+   That gives incident mode the cost it never had. It is the strongest
+   lever in the game -- +35% income a stage, three stages, one button --
+   and the simulator put it at 8.7x over six hours against a core loop of
+   1.0x, with no downside a player could feel. Now the thing that pays
+   you more makes your staff worse at their jobs while it runs, and how
+   hard to push it is a real question with two defensible answers rather
+   than an obvious yes.
+
+   Nothing here is saved, and nothing here needs to be. Culture is
+   derived from S.ach, burnout from S.debt and S.incident, and all three
+   were already in the save -- design rule 3 paying for itself. An
+   existing save gets its morale on load, backdated to whatever it had
+   already achieved, without a migration. */
+const BURNOUT_DEBT     = 0.02;   // per outstanding item, twelve at the ceiling
+const BURNOUT_INCIDENT = 0.08;   // per stage, three at the ceiling
+
+const culture = () => ACHIEVEMENTS.length ? Object.keys(S.ach).length / ACHIEVEMENTS.length : 0;
+const burnout = () => BURNOUT_DEBT * debtCount() + BURNOUT_INCIDENT * incidentStage();
+const morale  = () => Math.max(0, Math.min(1, culture() - burnout()));
+
+/* Morale pays nothing by itself. It is worth exactly what you have
+   bought to make it worth something, which is the bargain milk strikes
+   with kittens: the number sits there looking interesting until the
+   first benefit turns it into money, and then every achievement since
+   pays out at once. */
+function moraleMult(){
+  const q = morale();
+  let m = 1;
+  UPGRADES.forEach(u=>{ if(u.kind === "morale" && S.upgrades[u.id]) m *= 1 + q * u.factor; });
+  return m;
+}
+const moraleGate = () => UPGRADES.some(u=>u.kind === "morale" && S.upgrades[u.id]);
+
+// What is currently eating morale, in the order it is worth fixing.
+function moraleDrag(){
+  const bits = [];
+  if(incidentStage() > 0) bits.push("incident stage " + incidentStage());
+  if(debtCount() > 0)     bits.push(debtCount() + " debt");
+  return bits.join(" · ");
+}
+
+/* ---------- the wire ----------
+   Cookie Clicker's news ticker: the cheapest character in that game and
+   the single thing that does most for its tone. A strip of nonsense that
+   knows what you have been doing is worth more than another multiplier.
+
+   Same idea, an MSP's actual day -- the tickets that really come in, the
+   clients who really send them, and the vendors who really make it
+   worse. Lines are pooled behind a predicate, so the wire is reporting
+   on this company rather than telling the same eight jokes at hour one
+   and hour forty.
+
+   It runs off the main loop rather than an interval of its own. Design
+   rule 1: one interval owns everything, including the parts that are
+   only decoration. */
+const NEWS = [
+  { when: () => true, lines: [
+    "Client reports the internet is down. The monitor was switched off.",
+    "New ticket: \"URGENT!!!\" The body of the ticket is empty.",
+    "Printer offline. Printer has always been offline. Printer will always be offline.",
+    "A user has replied \"thanks\" to a closed ticket, reopening it.",
+    "Someone has plugged a space heater into the UPS again.",
+    "Backup completed successfully. Nobody has ever tested a restore.",
+    "Vendor announces end-of-life for the thing you standardised on last year.",
+    "A director forwards a phishing email to ask whether it is real. It is not.",
+    "Certificate expires in thirty days. This message will repeat in twenty-nine days.",
+    "The temporary switch in the ceiling has passed its second birthday.",
+    "Wi-Fi is down in the one conference room the CEO uses.",
+    "Someone has discovered they can email the whole company. Reply-all follows.",
+    "Change freeze announced. Three emergency changes approved during it.",
+    "The RMM is reporting 100% disk on a machine that was decommissioned in March.",
+    "Someone put DHCP on a laptop. The laptop has gone home for the weekend.",
+    "Ticket reopened: \"still slow\". No further detail was provided.",
+    "The documentation has been updated. It is a page titled TODO.",
+    "A user has written their new password on the monitor bezel. In marker.",
+    "Monitoring alert cleared itself. Nobody is going to look into why.",
+    "Someone has asked whether it can be done by Friday. It is Thursday."
+  ]},
+  { when: () => S.staffTotal >= 25, lines: [
+    "Payroll would like a word about headcount.",
+    "The standup now takes longer than the work discussed in it.",
+    "Someone has created a channel for coordinating the other channels.",
+    "Two techs have solved the same ticket twice, differently."
+  ]},
+  { when: () => incidentStage() > 0, lines: [
+    "The bridge call is ninety minutes old. Nobody has said anything new since minute four.",
+    "Status page updated to \"investigating\". It will stay there.",
+    "Someone from marketing has joined the incident bridge to ask for an ETA.",
+    "The incident channel has four hundred messages and one useful one.",
+    "A senior person has joined the call to be visibly concerned."
+  ]},
+  { when: () => debtCount() >= 6, lines: [
+    "The backlog has developed a backlog of its own.",
+    "A script nobody understands has become load-bearing.",
+    "That quick fix from March is now in production at nine clients.",
+    "The staging environment is a laptop under a desk. It is the desk of someone who left."
+  ]},
+  { when: () => S.exits >= 1, lines: [
+    "Your old company has been renamed. The new logo is worse.",
+    "A diligence checklist arrives. It has three hundred and forty rows.",
+    "A former client asks whether you still do this. Technically, you do.",
+    "An acquirer's integration plan lists your team as a line item."
+  ]},
+  { when: () => Object.keys(S.clients).length >= 4, lines: [
+    "Riverside Dental has emailed about HIPAA again. It is a photograph of a monitor.",
+    "Anderson Manufacturing has connected something new to the shop floor VLAN.",
+    "Midtown Law would like to know whether the cloud is secure. They are asking on speakerphone.",
+    "Coastal Plumbing's dispatch software has been discontinued. They found out from you."
+  ]},
+  { when: () => marketGate(), lines: [
+    "Licence resellers are discounting heavily. Something is wrong.",
+    "On-call hours are trading above par. Nobody involved is happy about it.",
+    "A hardware refurbisher has emailed about \"exciting inventory\"."
+  ]},
+  { when: () => totalRate() >= 1e6, lines: [
+    "An analyst has described your company as \"a platform\".",
+    "A private equity associate would love fifteen minutes of your time.",
+    "You have been placed in a quadrant nobody asked to be placed in.",
+    "A trade publication would like a quote about AI. Any quote."
+  ]},
+  { when: () => moraleGate() && morale() < 0.25, lines: [
+    "Somebody has updated their headline to \"open to work\".",
+    "The kitchen is out of coffee. This is being treated as an incident.",
+    "An exit interview has appeared in the calendar. Nobody scheduled it.",
+    "Two techs are having a quiet conversation in the car park."
+  ]},
+  { when: () => moraleGate() && morale() >= 0.8, lines: [
+    "Somebody brought in doughnuts, unprompted, for no occasion.",
+    "A tech has written documentation voluntarily. Investigate.",
+    "Nobody worked the weekend. Nothing broke.",
+    "A recruiter's message has gone unanswered in three inboxes."
+  ]}
+];
+
+const NEWS_MS = 13000;
+let newsAt = 0, newsLast = "";
+function newsTick(){
+  const el = $("wire");
+  if(!el) return;
+  const now = Date.now();
+  if(now < newsAt) return;
+  newsAt = now + NEWS_MS;
+
+  const pool = [];
+  NEWS.forEach(g=>{ if(g.when()) pool.push.apply(pool, g.lines); });
+  if(!pool.length) return;
+  // Draw until it is not the line already on screen. Bounded, because a
+  // pool of one would otherwise spin forever.
+  let line = newsLast;
+  for(let i = 0; i < 8 && line === newsLast; i++){
+    line = pool[Math.floor(Math.random() * pool.length)];
+  }
+  newsLast = line;
+
+  // The text goes in now, not in a callback. This first swapped it inside
+  // a requestAnimationFrame, which does not fire in a background tab --
+  // so opening the game and switching away left the wire permanently
+  // blank, with the next line not due for another thirteen seconds after
+  // coming back. The fade is decoration and is allowed to be skipped; the
+  // words are not.
+  el.textContent = line;
+  // The stylesheet honours prefers-reduced-motion, so this has to as well
+  // -- a fade driven from script is not exempt from the setting just
+  // because it is not written in CSS.
+  // reduceMotion is declared further down, with the floor animation that
+  // first needed it; it is a plain boolean read once at load.
+  if(el.animate && !reduceMotion){
+    try{ el.animate([{opacity:0},{opacity:1}], {duration:350, easing:"ease"}); }
+    catch(e){ /* animation is a nicety; the line is already on screen */ }
+  }
+}
+
 /* ---------- reputation upgrades ----------
    Cookie Clicker's heavenly upgrades. Bought with reputation, kept
    forever, and the only thing reputation is ever spent on -- which is
@@ -1488,7 +1737,10 @@ function rateOf(def){
     if(u.kind === "staff"  && u.target === def.id) r *= u.mult;
     if(u.kind === "global") r *= u.mult;
   });
-  return r * levelMult(def.id) * repMult();
+  // Morale multiplies staff output and nothing else -- client contracts
+  // are flat by design, and a signed contract does not care how the team
+  // is feeling. moraleMult() is 1 until a benefit is bought.
+  return r * levelMult(def.id) * repMult() * moraleMult();
 }
 /* What hiring one more of a tier actually adds, measured by asking
    rateOf() with the extra copy in place.
@@ -1630,6 +1882,27 @@ function renderHead(){
     }
   }
 
+  const moBox = $("morale");
+  if(moBox){
+    const on = moraleGate();
+    moBox.style.display = on ? "flex" : "none";
+    if(on){
+      const q = morale();
+      const pct = Math.round(q * 100);
+      $("moN").textContent = pct + "%";
+      const drag = moraleDrag();
+      // Say what it is worth, then what is eating it -- in that order,
+      // because the multiplier is why anyone looks and the cause is what
+      // they can act on.
+      $("moDrag").textContent =
+        "staff output x" + (Math.round(moraleMult() * 100) / 100) +
+        (drag ? " · burnout: " + drag : "");
+      $("moFill").style.width = pct + "%";
+      moBox.classList.toggle("low", q < 0.25);
+      moBox.classList.toggle("mid", q >= 0.25 && q < 0.6);
+    }
+  }
+
   // The Sell tab flags itself when an exit is actually available.
   const prBadge = $("prBadge");
   prBadge.style.display = pendingRep() > 0 ? "inline-block" : "none";
@@ -1674,7 +1947,13 @@ function listSignature(){
     return "s|" + STAFF.map((d,i)=>{
       const unlocked = i === 0 || c(STAFF[i-1].id) > 0;
       return d.id + ":" + c(d.id) + ":" + (unlocked ? 1 : 0);
-    }).join(",");
+    }).join(",") +
+    // Morale moves with debt and incident stage, which move on their own,
+    // and it is inside every per-hire figure on these rows. Without it the
+    // phone-only line kept quoting a payback from whenever the list was
+    // last built. Rounded, and 1 until a benefit is owned, so this costs
+    // nothing until there is something to be stale about.
+    "|" + Math.round(moraleMult() * 1000);
   }
   if(tab === "prestige"){
     // Rebuild as the headline numbers move, but not every tick.
@@ -2499,7 +2778,8 @@ function withUpgrade(u, fn){
 function upgradeTip(u){
   let effect;
   // "Base", because the income share of a click is not multiplied.
-  if(u.kind === "click")     effect = "Base click value x" + u.mult;
+  if(u.kind === "morale")    effect = "Staff output up to +" + Math.round(u.factor * 100) + "% on morale";
+  else if(u.kind === "click")     effect = "Base click value x" + u.mult;
   else if(u.kind === "global")   effect = "All staff output x" + u.mult;
   else if(u.kind === "holdspeed") effect = "Hold speed x" + u.mult;
   else if(u.kind === "staff"){
@@ -2521,7 +2801,9 @@ function upgradeTip(u){
   let delta = "";
   if(u.kind === "click"){
     delta = money(clickValue()) + " -> " + money(withUpgrade(u, clickValue)) + " per click";
-  } else if(u.kind === "global"){
+  } else if(u.kind === "global" || u.kind === "morale"){
+    // A benefit is worth whatever morale happens to be right now, which is
+    // exactly why it is measured rather than quoted from u.factor.
     delta = "$" + rateStr(totalRate()) + "/s -> $" + rateStr(withUpgrade(u, totalRate)) + "/s";
   } else if(u.kind === "staff"){
     const t = STAFF.find(s=>s.id===u.target);
@@ -3200,6 +3482,9 @@ setInterval(()=>{
   debtTick(dt);
   escTick();
   renderBuffs();
+  // Decoration, but it still runs off this loop rather than one of its
+  // own -- design rule 1 does not have an exemption for flavour.
+  newsTick();
   // The hovered row's numbers move with income, so refresh what it says.
   if(tipFor && document.contains(tipFor)) showTip(tipFor);
   else if(tipFor) hideTip();
@@ -3216,6 +3501,7 @@ renderHead();
 renderList();
 renderSheet(true);
 coachSync();
+newsTick();
 // A save from before achievements existed may already qualify for several
 // -- retroactively award them on load rather than making a returning
 // player re-earn what they'd already done.

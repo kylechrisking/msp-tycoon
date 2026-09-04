@@ -157,6 +157,7 @@ const EXPORTS = `{
   escGate, escInterval, pickEscalation, buffActive, buffMult,
   invoiceValue, claimEscalation,
   fmt, money, rateStr, scale, upgradeTip, withUpgrade, pctOfIncome, marginalStaff, repBonusPct,
+  morale, culture, burnout, moraleMult, moraleGate, moraleDrag, newsTick, NEWS,
   renderHead, renderList, renderSheet, renderBuffs, renderProfile, renderProfileAch,
   syncProfileDot, staffTip, clientTip, coachSync,
   PRESTIGE_MIN, LEVEL_MAX, LEVEL_STEP, DEBT_MAX, DEBT_DRAG, DEBT_YIELD,

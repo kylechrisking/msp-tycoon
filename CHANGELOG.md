@@ -10,6 +10,11 @@ here come out of `tools/sim.html` and can be reproduced by running it.
 ## [Unreleased]
 
 ### Fixed
+- **The wire could stay permanently blank.** The line swap was done inside
+  a `requestAnimationFrame` callback, which does not fire in a background
+  tab — so opening the game and switching away left the ticker empty, with
+  the next line not due for thirteen seconds after coming back. The text
+  goes in synchronously now and the fade is allowed to be skipped.
 - **The store quoted the wrong output for half the roster.** Both the hover
   tooltip and the phone row computed a tier's per-copy rate as
   `d.rate * repMult()`, which ignores the upgrade that doubles that line and
@@ -104,6 +109,34 @@ here come out of `tools/sim.html` and can be reproduced by running it.
   truth about a price.
 
 ### Added
+- **Morale**, the thing thirty-six achievements were not previously for.
+  Cookie Clicker's milk, with the one change that makes it a decision:
+  milk only goes up, and this does not. Culture is what the company has
+  earned and keeps — one share per achievement. Burnout is what the way
+  you are running it right now costs — 2% per outstanding debt item, 8%
+  per incident stage. Morale is the difference, and five benefit upgrades
+  (Free Lunch Fridays, An Actual PTO Policy, An HR Business Partner, The
+  Four-Day Week, Profit Sharing) are the only things that turn it into
+  money, worth up to 6.1x staff output between them at full morale.
+
+  It gives incident mode the cost it never had. The simulator put incident
+  mode at 8.7x over six hours against a core loop of 1.0x, for one button
+  press and no downside a player could feel; a stage-three incident now
+  takes 24 points of morale off the benefits line while it runs. Both
+  answers are defensible, which is the point.
+
+  Nothing about it is saved. Culture derives from `S.ach`, burnout from
+  `S.debt` and `S.incident`, all three of which were already in the save —
+  design rule 3 paying for itself. Existing saves get their morale
+  backdated on load with no migration.
+- **The wire**, a news ticker in the shape of an MSP's actual day. Around
+  seventy lines across ten pools, each pool behind a predicate, so it
+  reports on this company rather than telling the same jokes at hour one
+  and hour forty — bridge calls during an incident, load-bearing scripts
+  once debt piles up, people quietly updating their LinkedIn when morale
+  drops, analysts calling you "a platform" past a million a second. It
+  runs off the one game loop, because design rule 1 has no exemption for
+  decoration.
 
 - **A fuzzer, `tools/fuzz.js`**, that plays badly on purpose. The bot plays
   well, which is the wrong instrument for finding bugs -- a sensible player
@@ -119,7 +152,7 @@ here come out of `tools/sim.html` and can be reproduced by running it.
   the runner. It holds no copy of the economy, so it cannot fall out of date
   with the game. Every system is switchable, because the useful number is
   never one run — it is the difference between two.
-- **An invariant suite, `tools/checks.js`**, run from the same page. Nineteen
+- **An invariant suite, `tools/checks.js`**, run from the same page. Twenty-two
   checks against the real game, most of them written for a bug that had
   already shipped: the reputation-squared click, the market farm, the
   tooltip overstatement, what an exit keeps, that a save survives a round
@@ -140,6 +173,20 @@ here come out of `tools/sim.html` and can be reproduced by running it.
 - README rewritten around measurements rather than estimates, including
   where a perfect bot and a casual profile actually reach each milestone.
 
+
+### Distribution
+
+- `tools/package.ps1` builds `dist/msp-tycoon-web.zip` — 55 KB, `index.html`
+  and `sw.js`, with `api.php` deliberately excluded so every copy outside
+  rootlabs.us runs in the signed-out state the game already handles. It
+  refuses to build if `index.html` has picked up an external script, since
+  that would mean the zip is quietly incomplete.
+- `PUBLISHING.md` covers where this can go and what it costs. The short
+  version: Steam is **$100 per title** and not the free option it was hoped
+  to be; itch.io (the page already exists) is free with a share you set
+  yourself; and the ad-revenue-share portals — CrazyGames, Poki — are where
+  a browser idle game realistically earns anything, at the cost of an SDK
+  and an application.
 ### Known
 
 - **Fully Certified is not realistically reachable.** Training levels cost
@@ -147,5 +194,15 @@ here come out of `tools/sim.html` and can be reproduced by running it.
   one per six hours — 330 hours of wall clock, spending nothing on any other
   tier. It is the only achievement the bot never unlocks, and it is gated on
   the calendar rather than on play.
-- **Incident mode may be too strong for how cheap it is to switch on.** 8.7x
-  for a button press is the largest single lever in the game.
+- **Incident mode is still the strongest lever**, but it is no longer free.
+  Burnout costs a stage-three incident 24 points of morale for as long as
+  it runs, which is a visible bite out of the benefits line rather than a
+  number in a spreadsheet. Whether that is *enough* of a cost is the next
+  thing worth simulating, and it now has a dial to turn:
+  `BURNOUT_INCIDENT`.
+- **Morale is a positive feedback loop, deliberately.** More achievements
+  raise culture, culture raises income, income earns achievements. It is
+  bounded — culture caps at 1.0 and the benefits cap at 6.1x — so it
+  accelerates the curve without bending it, and a 55-hour bot run finishes
+  at $12.6Sx with the growth still decelerating. Worth watching if more
+  benefits are ever added.

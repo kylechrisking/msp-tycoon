@@ -39,7 +39,7 @@ staff; staff close tickets while you are away.
 - **Eight staff tiers**, Help Desk Tech up to a second branch office.
   Each copy costs 15% more than the last, so every tier eventually gives
   way to the next.
-- **Nineteen upgrades**, real tools of the trade — RMM, PSA, SIEM, SOC 2,
+- **Twenty-four upgrades**, real tools of the trade — RMM, PSA, SIEM, SOC 2,
   AI triage, managed XDR — that either double one staff line or lift
   everything. Every staff tier now has exactly one doubler of its own;
   the top three used to have none, so a late run had nothing left to buy
@@ -84,11 +84,31 @@ staff; staff close tickets while you are away.
   while piling up debt faster and turning escalated tickets hostile. A
   hostile one still pays if you catch it and halves your income for a
   minute if you don't.
-- **Thirty-four achievements**, in the profile panel, from closing your
+- **Thirty-six achievements**, in the profile panel, from closing your
   first ticket up through ten exits and 500 reputation. Each one is checked
   against state that's already saved, so a returning player's old save
   gets retroactively credited for whatever it already qualifies for
   rather than making them earn it twice.
+- **Morale**, which is what those achievements are *for*. Cookie Clicker's
+  milk, except milk only ever goes up. Culture is what the company has
+  earned and keeps — one share per achievement. Burnout is what the way
+  you're running it right now is costing: 2% per outstanding debt item, 8%
+  per incident stage. Morale is the difference, and five benefit upgrades —
+  Free Lunch Fridays through Profit Sharing — are the only things that
+  turn it into money, multiplying staff output by up to 6.1x between them
+  at full morale. Nothing about it is saved: culture comes from `S.ach`,
+  burnout from `S.debt` and `S.incident`, and all three were already in the
+  save, so an existing game gets its morale backdated on load with no
+  migration. It also gives incident mode the cost it never had — the thing
+  that pays you 35% a stage now makes your staff worse at their jobs while
+  it runs.
+- **The wire**, a news ticker that knows what you've been doing. Roughly
+  seventy lines across ten pools, each behind a predicate, so it reports on
+  *this* company: it talks about bridge calls during an incident, about
+  load-bearing scripts once debt piles up, about people updating their
+  LinkedIn when morale drops, and about analysts calling you "a platform"
+  once income passes a million a second. Pure flavour, and it runs off the
+  one game loop like everything else.
 - **Clicking wins early on, on purpose.** A click is worth roughly ten
   seconds of a single Help Desk Tech's payroll, and the UI says so
   outright rather than leaving it to be inferred — a rate readout of
@@ -197,7 +217,7 @@ still finite, non-negative and self-consistent. A second mode renders
 every panel after every action and reads back what the UI tried to write,
 which is how a throwing store tooltip was caught.
 
-`tools/checks.js` holds the invariants — nineteen of them, most written
+`tools/checks.js` holds the invariants — twenty-two of them, most written
 for a bug that had already shipped. Each is verified by mutation:
 reintroducing the bug it covers, in a copy of the source, makes exactly
 that check fail and no other. A check that cannot fail is not a check.
@@ -211,21 +231,21 @@ of it.
 Where a perfect bot (five clicks a second, catches everything, exits on a
 tight trigger) gets to, by hour, with all systems engaged:
 
-| hour | lifetime | milestone |
-|-----:|---------:|-----------|
-| 0.16 | $1M      | first exit |
-| 2.4  | $1B-ish  | AI Triage |
-| 4.0  | —        | every client signed |
-| 6.0  | $10T     | every upgrade bought, 33 of 34 achievements |
-| 55   | $728Qi   | 115 exits, still a legible number |
+| hour | lifetime  | milestone |
+|-----:|----------:|-----------|
+| 0.16 | $1M       | first exit, and the first morale benefit |
+| 4.0  | —         | every client signed |
+| 6.0  | $47.2Qa   | all 24 upgrades, 33 of 36 achievements, morale 68% |
+| 55   | $12.6Sx   | 110 exits, still a legible number, still decelerating |
 
 A casual profile — one click a second, catching about a third of
 escalations, patient about exits, market and incident mode left alone —
-takes 38 minutes to the first exit, 19 hours to the last upgrade and the
-full client roster, and finishes a day with 30 of 34 achievements. The
-core loop on its own, with debt, training, market and incident all
-ignored, is $2.9B and 10 of 19 upgrades in that same day, which is the
-gap those systems are there to fill.
+takes 38 minutes to the first exit, buys its first morale benefit at the
+hour mark, and finishes a day on every upgrade, 30 of 36 achievements and
+69% morale. The core loop on its own, with debt, training, market,
+incident and the benefits line all ignored, is $305M in six hours against
+$47.2Qa for a game that engages with everything, which is the gap those
+systems exist to fill.
 
 What the four newer systems are actually worth, measured against the same
 seed at six hours with the core loop as 1.0x:
@@ -247,9 +267,11 @@ Three things that reads out:
   1.0x, so the mechanic is not free money in either direction.
 - **Incident mode is the strongest system in the game** and stronger than
   its own description: +35% a stage reads as a third, but three stages
-  compounding through a prestige loop is nearly 9x over six hours.
-  Whether that is too strong for something this cheap to switch on is the
-  open balance question.
+  compounding through a prestige loop is nearly 9x over six hours. That
+  was the open balance question, and morale is the answer to it — a
+  stage-three incident now costs 24 points of morale for as long as it
+  runs, which comes straight off the benefits line. It is still worth
+  declaring; it is no longer worth declaring without thinking.
 - **The market is worth nothing to a bot that prestiges hard**, because
   `marketGate()` wants five vCIOs and an exit wipes them. It is a
   mechanic for players who sit on a run, not for players who cycle it.

@@ -342,6 +342,67 @@ export const CHECKS = [
     }
   },
   {
+    name: "morale pays nothing until a benefit is bought",
+    why:
+      "The bargain milk strikes with kittens: the number is real from the " +
+      "first achievement, and worth exactly zero until you buy something " +
+      "that spends it. If morale ever moved income on its own, every " +
+      "existing save would silently change value on load.",
+    run(g) {
+      g.S.staff.helpdesk = 10; g.S.staffTotal = 10;
+      const flat = g.totalRate();
+      g.ACHIEVEMENTS.forEach(a => { g.S.ach[a.id] = true; });
+      if (g.morale() < 0.99) throw new Error(`every achievement gives only ${g.morale()} morale`);
+      if (g.totalRate() !== flat) throw new Error("full morale changed income with no benefit owned");
+      if (g.moraleMult() !== 1) throw new Error(`moraleMult is ${g.moraleMult()} with nothing bought`);
+      g.S.cash = 1e12;
+      g.buyUpgrade(g.UPGRADES.find(u => u.id === "lunch"));
+      if (!(g.totalRate() > flat)) throw new Error("buying a benefit did not pay out morale");
+    }
+  },
+  {
+    name: "burnout makes an incident cost something",
+    why:
+      "The point of morale going down as well as up. Incident mode is the " +
+      "strongest lever in the game and had no cost a player could feel; " +
+      "running it should now visibly cut what the benefits line is worth.",
+    run(g) {
+      g.S.staff.helpdesk = 10; g.S.staffTotal = 10;
+      g.ACHIEVEMENTS.forEach(a => { g.S.ach[a.id] = true; });
+      g.S.cash = 1e12;
+      g.buyUpgrade(g.UPGRADES.find(u => u.id === "lunch"));
+      const calm = g.moraleMult();
+      g.S.upgrades.siem = true;
+      g.escalateIncident(); g.escalateIncident(); g.escalateIncident();
+      const loud = g.moraleMult();
+      if (!(loud < calm)) throw new Error(`a stage-3 incident did not reduce morale (${calm} -> ${loud})`);
+      g.standDown();
+      if (Math.abs(g.moraleMult() - calm) > 1e-9) {
+        throw new Error("standing down did not restore morale");
+      }
+      // And debt has to bite too, or half the mechanic is decoration.
+      g.S.debt = g.DEBT_MAX;
+      if (!(g.moraleMult() < calm)) throw new Error("maximum technical debt did not reduce morale");
+    }
+  },
+  {
+    name: "the wire always has something to say",
+    why:
+      "Every line is behind a predicate, so a state where every pool is " +
+      "closed would leave the ticker blank forever. The always-on pool " +
+      "exists to make that impossible; this is the check that it stayed.",
+    run(g) {
+      const pools = g.NEWS.filter(p => p.when());
+      if (!pools.length) throw new Error("no news pool is open on a clean save");
+      const lines = pools.reduce((n, p) => n + p.lines.length, 0);
+      if (lines < 10) throw new Error(`only ${lines} lines available on a clean save`);
+      // And nothing in any pool should be blank or a duplicate.
+      const all = g.NEWS.flatMap(p => p.lines);
+      if (all.some(l => !l || !l.trim())) throw new Error("a news line is empty");
+      if (new Set(all).size !== all.length) throw new Error("a news line is duplicated");
+    }
+  },
+  {
     name: "the number formatters never render a non-number",
     why:
       "fmt() degrading to '1.56e+81Dc' is how the old runaway announced itself. " +
