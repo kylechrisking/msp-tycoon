@@ -209,6 +209,43 @@ export const CHECKS = [
     }
   },
   {
+    name: "a hostile save cannot poison the economy",
+    why:
+      "Options offers a paste-in save box, so the loader is reachable with " +
+      "anything that parses as JSON -- not just with saves this game wrote. " +
+      "Every field is coerced on load; this is the check that it stays that way.",
+    run(g) {
+      const junk = {
+        v: "x", cash: "lots", lifetime: null, clicks: -5, staff: { helpdesk: "many", ghost: 3 },
+        staffTotal: NaN, upgrades: { macros: 1, ghost: true }, reputation: -1e9,
+        repEarned: "0", exits: 1.7, ach: { ghost: true }, repUp: { ghost: true },
+        mkt: null, mktProfit: "x", incident: 99, lumps: -3, levels: { helpdesk: 999 },
+        debt: "x", debtBank: Infinity, buffs: { allhands: "soon" }, clients: { ghost: true },
+        lastSeen: "yesterday", tut: null
+      };
+      g.sandbox.localStorage.setItem(g.SAVE_KEY, JSON.stringify(junk));
+      g.load();
+      // Then run the game: a value that is merely wrong is survivable, one
+      // that is NaN spreads to everything it touches within a tick.
+      for (let i = 0; i < 5; i++) {
+        g.clock.advance(1000);
+        g.earn(g.totalRate() * 1);
+        g.closeTicket();
+        g.marketTick(); g.lumpTick(); g.debtTick(1);
+      }
+      for (const [name, v] of [["cash", g.S.cash], ["lifetime", g.S.lifetime],
+                               ["rate", g.totalRate()], ["click", g.clickValue()],
+                               ["staffTotal", g.S.staffTotal], ["pendingRep", g.pendingRep()]]) {
+        if (!Number.isFinite(v)) throw new Error(`${name} is ${String(v)} after loading junk`);
+      }
+      if (g.S.cash < 0) throw new Error(`cash went negative (${fmtNum(g.S.cash)}) on a hostile save`);
+      if (g.levelOf("helpdesk") > g.LEVEL_MAX) {
+        throw new Error(`training level ${g.levelOf("helpdesk")} exceeds the cap of ${g.LEVEL_MAX}`);
+      }
+      if (g.incidentStage() > g.INCIDENT_MAX) throw new Error("incident stage exceeded its ceiling");
+    }
+  },
+  {
     name: "debt drags but never strangles",
     why: "DEBT_MAX exists so income cannot be driven to zero by walking away.",
     run(g) {

@@ -2044,18 +2044,32 @@ function load(){
 
   // Merge field by field. Never assign the object wholesale -- that is how a
   // save from an older version silently deletes fields added since.
-  S.cash       = +d.cash       || 0;
-  S.lifetime   = +d.lifetime   || 0;
-  S.clicks     = +d.clicks     || 0;
-  S.reputation = +d.reputation || 0;
-  S.repEarned  = +d.repEarned  || 0;
-  S.exits      = +d.exits      || 0;
+  /* Every number in a save is a balance, a count or a timestamp, and none
+     of those can be negative -- but `+d.x || 0` passes a negative through
+     happily, because it is only guarding against NaN. With a paste-a-save
+     box in Options, one field was enough: reputation: -1e9 makes
+     repMult() negative, which makes every staff rate negative, which has
+     the game paying out negative money on the next tick until the balance
+     is gone. Floor everything, and round the things that are counts. */
+  const amount = (v, max) => {
+    const n = +v;
+    if(!isFinite(n) || n <= 0) return 0;
+    return max === undefined ? n : Math.min(n, max);
+  };
+  const count = (v, max) => Math.floor(amount(v, max));
+
+  S.cash       = amount(d.cash);
+  S.lifetime   = amount(d.lifetime);
+  S.clicks     = count(d.clicks);
+  S.reputation = amount(d.reputation);
+  S.repEarned  = amount(d.repEarned);
+  S.exits      = count(d.exits);
   S.staff      = (d.staff && typeof d.staff === "object") ? d.staff : {};
   S.upgrades   = (d.upgrades && typeof d.upgrades === "object") ? d.upgrades : {};
   S.ach        = (d.ach && typeof d.ach === "object") ? d.ach : {};
   S.repUp      = (d.repUp && typeof d.repUp === "object") ? d.repUp : {};
   const m = (d.mkt && typeof d.mkt === "object") ? d.mkt : {};
-  S.mkt = {price:{}, inv:{}, entry:{}, at:+m.at || 0};
+  S.mkt = {price:{}, inv:{}, entry:{}, at:amount(m.at)};
   MARKET.forEach(g=>{
     const p = +(m.price||{})[g.id];
     S.mkt.price[g.id] = (p > 0 && isFinite(p)) ? p : MKT_BASE;
@@ -2064,36 +2078,55 @@ function load(){
     const e = +(m.entry||{})[g.id];
     S.mkt.entry[g.id] = (e > 0 && isFinite(e)) ? e : MKT_BASE;
   });
-  S.mktProfit  = +d.mktProfit || 0;
-  S.incident   = Math.min(+d.incident || 0, INCIDENT_MAX);
-  S.incidentPeak = Math.min(+d.incidentPeak || 0, INCIDENT_MAX);
-  S.lumps      = Math.min(+d.lumps || 0, LUMP_CAP);
-  S.lumpAt     = +d.lumpAt || 0;
+  S.mktProfit  = amount(d.mktProfit);
+  S.incident   = count(d.incident, INCIDENT_MAX);
+  S.incidentPeak = count(d.incidentPeak, INCIDENT_MAX);
+  S.lumps      = count(d.lumps, LUMP_CAP);
+  S.lumpAt     = amount(d.lumpAt);
   S.levels     = (d.levels && typeof d.levels === "object") ? d.levels : {};
-  S.debt       = Math.min(+d.debt || 0, DEBT_MAX);
-  S.debtBank   = +d.debtBank || 0;
-  S.nextDebt   = +d.nextDebt || 0;
-  S.remediated = +d.remediated || 0;
+  S.debt       = count(d.debt, DEBT_MAX);
+  S.debtBank   = amount(d.debtBank);
+  S.nextDebt   = amount(d.nextDebt);
+  S.remediated = count(d.remediated);
   // Buffs are end timestamps, so anything that expired while away is
   // simply dropped rather than resuming with time left on it.
   S.buffs      = {};
   if(d.buffs && typeof d.buffs === "object"){
     ESCALATIONS.forEach(e=>{ const t = +d.buffs[e.id]; if(t > Date.now()) S.buffs[e.id] = t; });
   }
-  S.nextEsc    = +d.nextEsc || 0;
-  S.escCaught  = +d.escCaught || 0;
+  S.nextEsc    = amount(d.nextEsc);
+  S.escCaught  = count(d.escCaught);
   S.clients    = (d.clients && typeof d.clients === "object") ? d.clients : {};
   S.lastSeen   = +d.lastSeen || Date.now();
   // Absent on saves from before the tour existed. Those players have
   // already learned the game, so treat a missing record as "seen it".
   S.tut        = (d.tut && typeof d.tut === "object") ? d.tut : {done:true};
 
+  /* Staff counts and training levels are the only saved maps whose values
+     are numbers rather than flags, and they used to be taken at face
+     value -- every scalar above is coerced, these two were not. Options
+     has a paste-a-save box, so the loader is reachable with anything that
+     parses as JSON: `staff.helpdesk = "many"` made rateOf() return NaN
+     and spread it through cash, income and every achievement threshold
+     within one tick, unrecoverably. `levels.helpdesk = 999` bought a 100x
+     multiplier on a tier the store will only ever sell ten levels of.
+
+     So rebuild both from static config rather than filtering what
+     arrived: a whole number, in range, or absent. That drops ids which no
+     longer exist in the same pass, which is what this block did before. */
+  const staffIn = S.staff, levelsIn = S.levels;
+  S.staff = {}; S.levels = {};
+  STAFF.forEach(s=>{
+    const n = Math.floor(+staffIn[s.id]);
+    if(isFinite(n) && n > 0) S.staff[s.id] = n;
+    const l = Math.floor(+levelsIn[s.id]);
+    if(isFinite(l) && l > 0) S.levels[s.id] = Math.min(l, LEVEL_MAX);
+  });
+
   // Drop ids that no longer exist, so removing content cannot corrupt a save.
-  Object.keys(S.staff).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.staff[k]; });
   Object.keys(S.upgrades).forEach(k=>{ if(!UPGRADES.some(u=>u.id===k)) delete S.upgrades[k]; });
   Object.keys(S.clients).forEach(k=>{ if(!CLIENTS.some(cl=>cl.id===k)) delete S.clients[k]; });
   Object.keys(S.ach).forEach(k=>{ if(!ACHIEVEMENTS.some(a=>a.id===k)) delete S.ach[k]; });
-  Object.keys(S.levels).forEach(k=>{ if(!STAFF.some(s=>s.id===k)) delete S.levels[k]; });
   Object.keys(S.repUp).forEach(k=>{ if(!REP_UPGRADES.some(u=>u.id===k)) delete S.repUp[k]; });
 
   // Saves from before reputation was split into earned and held carry no

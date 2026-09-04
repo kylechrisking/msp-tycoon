@@ -10,7 +10,22 @@ here come out of `tools/sim.html` and can be reproduced by running it.
 ## [Unreleased]
 
 ### Fixed
-
+- **A corrupt or edited save could poison the economy for good.** Options
+  has a paste-a-save box, so the loader is reachable with anything that
+  parses as JSON, and two classes of field went through it unchecked. Staff
+  counts and training levels are the only saved maps whose values are
+  numbers rather than flags, and they were taken at face value:
+  `staff.helpdesk = "many"` made `rateOf()` return `NaN` and spread it
+  through cash, income and every achievement threshold within one tick,
+  unrecoverably, while `levels.helpdesk = 999` bought a 100x multiplier on
+  a tier the store will only ever sell ten levels of. Both are now rebuilt
+  from static config as whole numbers in range.
+- **A negative number in a save made the game pay out negative money.**
+  Every scalar was guarded with `+d.x || 0`, which catches `NaN` but passes
+  a negative straight through. `reputation: -1e9` made `repMult()` negative,
+  which made every staff rate negative, which drained the balance on the
+  next tick. Balances and counts are now floored at zero, and counts
+  rounded.
 - **The economy no longer runs away.** `clickValue()` multiplied its whole
   result by `repMult()`, but the `totalRate() * 0.05` share it adds already
   carried `repMult()` from `rateOf()` — so a click was worth reputation
@@ -62,12 +77,14 @@ here come out of `tools/sim.html` and can be reproduced by running it.
   the runner. It holds no copy of the economy, so it cannot fall out of date
   with the game. Every system is switchable, because the useful number is
   never one run — it is the difference between two.
-- **An invariant suite, `tools/checks.js`**, run from the same page. Fifteen
+- **An invariant suite, `tools/checks.js`**, run from the same page. Sixteen
   checks against the real game, most of them written for a bug that had
   already shipped: the reputation-squared click, the market farm, the
   tooltip overstatement, what an exit keeps, that a save survives a round
   trip and that junk in one does not, and that the formatters never render
-  `NaN`, `Infinity` or scientific notation whatever the economy does.
+  `NaN`, `Infinity` or scientific notation whatever the economy does. Each one
+  is verified by mutation: reintroducing the bug it covers in a copy of the
+  source makes exactly that check fail, and no other.
 
 ### Changed
 
